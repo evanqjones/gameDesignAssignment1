@@ -278,10 +278,12 @@ const LIB = {
   skywardStep:{id:'skywardStep', name:'Skyward Step', type:'dodge', dmg:0, range:0, tag:'dash', from:[], cd:700, desc:'Launch straight upward to escape the crowd.', icon:'⬆️', dashSpeed:0, dashDuration:0, invuln:460, launchSpeed:1120},
 
   fireball:      {id:'fireball', name:'Fireball', type:'special', dmg:13, range:520, tag:'burn', from:[], cd:900, desc:'Ranged projectile that applies burn.', icon:'🔥'},
-  grappleThrow:  {id:'grappleThrow', name:'Grapple Throw', type:'special', dmg:16, range:150, tag:'slam', from:[], cd:900, desc:'Yank a foe close and slam them.', icon:'🪝'},
+  grappleThrow:  {id:'grappleThrow', name:'Grapple Throw', type:'special', dmg:16, range:360, tag:'slam', from:[], cd:900, desc:'Yank a distant foe close and slam them.', icon:'🪝'},
   whirlwind:     {id:'whirlwind', name:'Whirlwind', type:'special', dmg:11, range:170, tag:'aoe', from:[], cd:950, desc:'Spin attack hits everything around you.', icon:'🌪️'},
   poisonDart:    {id:'poisonDart', name:'Poison Dart', type:'special', dmg:4, range:520, tag:'bleed', from:[], cd:820, desc:'Ranged shot that stacks bleed damage.', icon:'🎯'},
   vampiricStrike:{id:'vampiricStrike', name:'Vampiric Strike', type:'special', dmg:13, range:92, tag:'lifesteal', from:[], cd:900, desc:'Heals you for the damage you deal.', icon:'🩸'},
+  meteorRain:    {id:'meteorRain', name:'Meteor Rain', type:'special', dmg:18, range:0, tag:'meteor', from:[], cd:1600, desc:'Calls down meteors on enemies across the field.', icon:'☄️'},
+  novaBurst:     {id:'novaBurst', name:'Nova Burst', type:'special', dmg:16, range:230, tag:'aoe', from:[], cd:1150, desc:'Creates a damaging blast around you.', icon:'💥'},
 };
 const LIB_LIST = Object.values(LIB);
 // these hit a single chosen target instead of cleaving the whole frontal arc
@@ -290,7 +292,7 @@ const MAX_CLEAVE_TARGETS = 5;
 
 const STARTER_DECK = [
   'jab','jab','cross','risingKnee','uppercut','heavySlam','juggleKick',
-  'rollDodge','rollDodge','flashStep','skywardStep','fireball','whirlwind'
+  'rollDodge','rollDodge','flashStep','skywardStep','fireball','whirlwind','meteorRain','novaBurst'
 ];
 
 const TYPES = ['light','heavy','dodge','special'];
@@ -548,7 +550,10 @@ function executeCard(card, type){
   }
 
   if(card.dmg>0){
-    if(card.tag==='aoe'){
+    if(card.id==='meteorRain'){
+      targets = shuffle(state.enemies.filter(en=>en.alive)).slice(0,7);
+      spawnMeteorRain(targets);
+    } else if(card.tag==='aoe'){
       targets = enemiesInRadius(player.x, card.range).slice(0,MAX_CLEAVE_TARGETS);
       spawnAoeRing(player.x, card.type, card.range);
     } else if(card.range>=300){
@@ -784,6 +789,14 @@ function spawnAttackFx(card, type, targetX){
       fx.push({kind:'drain', x, y:y-60, facing, life:380, maxLife:380, color:'#ff2e88', targetX});
       break;
 
+    case 'meteorRain':
+      fx.push({kind:'rune', x, y:y-68, life:520, maxLife:520, color:'#ff9d5c'});
+      break;
+    case 'novaBurst':
+      fx.push({kind:'ring', x, y:GROUND_Y-4, life:440, maxLife:440, color:'#b884ff', radius:230});
+      fx.push({kind:'shock', x, y:y-8, life:360, maxLife:360, color:'#b884ff'});
+      break;
+
     default:
       if(type==='light') fx.push({kind:'slash', x, y:y-70, facing, life:160, maxLife:160, color:'#5ec8f8'});
       else if(type==='heavy') fx.push({kind:'slash', x, y:y-64, facing, life:300, maxLife:300, color:'#ff5d5d', big:true});
@@ -794,6 +807,11 @@ function spawnAttackFx(card, type, targetX){
 function spawnAoeRing(x, type, range){
   const color = type==='heavy' ? '#ff5d5d' : '#ffd166';
   fx.push({kind:'ring', x, y:GROUND_Y-4, life:380, maxLife:380, color, radius: range||140});
+}
+function spawnMeteorRain(targets){
+  targets.forEach((en,i)=>{
+    fx.push({kind:'meteor', x:en.x, y:GROUND_Y-10, life:420, maxLife:420, color:'#ff9d5c', delay:i*55});
+  });
 }
 
 function spawnPopup(x,y,text,color,big){
@@ -1733,10 +1751,23 @@ function drawFx(){
       ctx.beginPath(); ctx.arc(0,0, (1-t)*3+9, 0, Math.PI*2); ctx.fill();
       ctx.globalAlpha = t*0.5;
       ctx.beginPath(); ctx.arc(0,0, (1-t)*3+16, 0, Math.PI*2); ctx.fill();
+    } else if(f.kind==='meteor'){
+      const progress = 1-t;
+      const meteorY = -230 + progress*230;
+      ctx.translate(f.x,f.y);
+      ctx.strokeStyle=f.color; ctx.lineWidth=6;
+      ctx.beginPath(); ctx.moveTo(-42,meteorY-44); ctx.lineTo(0,meteorY); ctx.stroke();
+      ctx.fillStyle='#ffd166';
+      ctx.beginPath(); ctx.arc(0,meteorY,14,0,Math.PI*2); ctx.fill();
+      if(progress>0.7){
+        ctx.globalAlpha=(progress-0.7)/0.3;
+        ctx.strokeStyle='#ff5d5d'; ctx.lineWidth=4;
+        ctx.beginPath(); ctx.ellipse(0,0,50*(progress-0.7)/0.3,14*(progress-0.7)/0.3,0,0,Math.PI*2); ctx.stroke();
+      }
     } else if(f.kind==='chain'){
       ctx.translate(f.x,f.y);
       ctx.scale(f.facing,1);
-      const dist = f.targetX!=null ? clamp(Math.abs(f.targetX-f.x),20,130) : 90;
+      const dist = f.targetX!=null ? clamp(Math.abs(f.targetX-f.x),20,360) : 90;
       const len = dist * clamp(t<0.5 ? t*2 : 1-(t-0.5)*0.6, 0, 1);
       ctx.strokeStyle=f.color; ctx.lineWidth=3;
       ctx.setLineDash([7,5]);

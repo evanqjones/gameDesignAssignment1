@@ -284,6 +284,7 @@ const LIB = {
   vampiricStrike:{id:'vampiricStrike', name:'Vampiric Strike', type:'special', dmg:13, range:92, tag:'lifesteal', from:[], cd:900, desc:'Heals you for the damage you deal.', icon:'🩸'},
   meteorRain:    {id:'meteorRain', name:'Meteor Rain', type:'special', dmg:18, range:0, tag:'meteor', from:[], cd:1600, desc:'Calls down meteors on enemies across the field.', icon:'☄️'},
   novaBurst:     {id:'novaBurst', name:'Nova Burst', type:'special', dmg:16, range:230, tag:'aoe', from:[], cd:1150, desc:'Creates a damaging blast around you.', icon:'💥'},
+  cryoShot:      {id:'cryoShot', name:'Cryo Shot', type:'special', dmg:2, range:520, tag:'freeze', from:[], cd:1400, desc:'Freezes struck enemies for 5 seconds.', icon:'❄️'},
 };
 const LIB_LIST = Object.values(LIB);
 // these hit a single chosen target instead of cleaving the whole frontal arc
@@ -292,7 +293,7 @@ const MAX_CLEAVE_TARGETS = 5;
 
 const STARTER_DECK = [
   'jab','jab','cross','risingKnee','uppercut','heavySlam','juggleKick',
-  'rollDodge','rollDodge','flashStep','skywardStep','fireball','whirlwind','meteorRain','novaBurst'
+  'rollDodge','rollDodge','flashStep','skywardStep','fireball','whirlwind','meteorRain','novaBurst','cryoShot'
 ];
 
 const TYPES = ['light','heavy','dodge','special'];
@@ -432,7 +433,7 @@ function spawnEnemy(kind, x){
     boss:base.boss||false, attackMode:'melee', bossLeap:0,
     airborne:false, vy:0, airTime:0, stagger:0,
     attackState:'chase', stateTimer:0, hasStruck:false,
-    dot:null, facing:-1, hitFlash:0, alive:true, spawnAnim:1,
+    dot:null, facing:-1, hitFlash:0, frozen:0, alive:true, spawnAnim:1,
     row: rand(-14,14),
   });
 }
@@ -638,6 +639,11 @@ function applyDamageToEnemy(en, card){
   en.hitFlash = 140;
   interruptEnemyAttack(en);
   en.stagger = Math.max(en.stagger, card.tag==='stun'?900:180);
+  if(card.tag==='freeze'){
+    en.frozen = 5000;
+    spawnParticleBurst(en.x, GROUND_Y-45, '#70dcff', 12);
+    spawnPopup(en.x, GROUND_Y-105, 'FROZEN!', '#70dcff', true);
+  }
 
   const wasAirborne = en.airborne;
 
@@ -685,7 +691,7 @@ function applyDamageToEnemy(en, card){
 function spawnProjectile(card, dir){
   state.projectiles.push({
     x:player.x + dir*30, y:GROUND_Y-70-player.z, vx:dir*720, vy:0, card, life:900, friendly:true, r:10,
-    color: card.tag==='burn' ? '#ff9d5c' : card.tag==='bleed' ? '#8aff5c' : '#ffd166',
+    color: card.tag==='burn' ? '#ff9d5c' : card.tag==='bleed' ? '#8aff5c' : card.tag==='freeze' ? '#70dcff' : '#ffd166',
     hitEnemyIds: new Set(),
   });
 }
@@ -797,6 +803,9 @@ function spawnAttackFx(card, type, targetX){
     case 'novaBurst':
       fx.push({kind:'ring', x, y:GROUND_Y-4, life:440, maxLife:440, color:'#b884ff', radius:230});
       fx.push({kind:'shock', x, y:y-8, life:360, maxLife:360, color:'#b884ff'});
+      break;
+    case 'cryoShot':
+      fx.push({kind:'rune', x:x+facing*22, y:y-66, life:360, maxLife:360, color:'#70dcff'});
       break;
 
     default:
@@ -932,6 +941,11 @@ function updateEnemies(dt){
         if(en.dot.ticks<=0) en.dot=null;
         if(en.hp<=0 && en.alive){ en.alive=false; state.score+=40; state.killsThisRun++; spawnParticleBurst(en.x,GROUND_Y-40,en.color,16); }
       }
+    }
+
+    if(en.frozen>0){
+      en.frozen = Math.max(0, en.frozen-dt);
+      continue;
     }
 
     if(en.stagger>0){ en.stagger-=dt; continue; }
@@ -1560,7 +1574,8 @@ function drawEnemy(en){
   ctx.scale(en.facing*scale, scale);
 
   const flash = en.hitFlash>0;
-  ctx.fillStyle = flash? '#ffffff' : en.color;
+  const frozen = en.frozen>0;
+  ctx.fillStyle = flash? '#ffffff' : frozen ? '#70dcff' : en.color;
 
   if(en.kind==='brute'){
     roundRect(-24,-70,48,64,10); ctx.fill();
@@ -1568,7 +1583,7 @@ function drawEnemy(en){
   } else if(en.kind==='boss'){
     roundRect(-42,-118,84,108,16); ctx.fill();
     ctx.beginPath(); ctx.arc(0,-143,29,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle = flash? '#ffffff' : '#6b294f';
+    ctx.fillStyle = flash? '#ffffff' : frozen ? '#b9f4ff' : '#6b294f';
     roundRect(-54,-90,16,58,8); ctx.fill();
     roundRect(38,-90,16,58,8); ctx.fill();
     ctx.beginPath(); ctx.moveTo(-24,-164); ctx.lineTo(-43,-184); ctx.lineTo(-10,-167); ctx.closePath(); ctx.fill();
@@ -1577,7 +1592,7 @@ function drawEnemy(en){
     roundRect(-16,-56,32,46,8); ctx.fill();
     ctx.beginPath(); ctx.arc(0,-68,13,0,Math.PI*2); ctx.fill();
   } else if(en.kind==='flyer'){
-    ctx.fillStyle = flash? '#ffffff' : '#d47a28';
+    ctx.fillStyle = flash? '#ffffff' : frozen ? '#b9f4ff' : '#d47a28';
     ctx.beginPath(); ctx.moveTo(-8,-48); ctx.lineTo(-44,-66); ctx.lineTo(-22,-24); ctx.closePath(); ctx.fill();
     ctx.beginPath(); ctx.moveTo(8,-48); ctx.lineTo(44,-66); ctx.lineTo(22,-24); ctx.closePath(); ctx.fill();
     ctx.fillStyle = flash? '#ffffff' : en.color;
@@ -1589,6 +1604,11 @@ function drawEnemy(en){
   }
   ctx.fillStyle='#0a0710';
   ctx.fillRect(-8,en.kind==='boss'?-147:en.kind==='brute'?-88:en.kind==='flyer'?-73:-72,16,4);
+
+  if(frozen){
+    ctx.strokeStyle='#d7f7ff'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.arc(0,-44,en.radius+8,0,Math.PI*2); ctx.stroke();
+  }
 
   if(en.dot){
     ctx.fillStyle = en.dot.color;

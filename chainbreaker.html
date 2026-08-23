@@ -454,6 +454,8 @@ function waveComposition(wave){
 
 function startWave(n){
   state.wave = n;
+  // Projectiles pause during the reward screen; remove any leftovers before new enemies spawn.
+  state.projectiles = [];
   player.x = WORLD_W / 2;
   // Give the player time to reposition before the newly spawned enemies can hurt them.
   player.invuln = Math.max(player.invuln, WAVE_START_INVULN);

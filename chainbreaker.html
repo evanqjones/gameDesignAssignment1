@@ -272,9 +272,10 @@ const LIB = {
   ironCross:  {id:'ironCross', name:'Iron Cross', type:'heavy', dmg:15, range:104, tag:'launch', from:[], cd:620, desc:'Wide launching cleave.', icon:'⚔️'},
   meteorDrop: {id:'meteorDrop', name:'Meteor Drop', type:'heavy', dmg:22, range:112, tag:'slam', from:['juggle'], cd:780, desc:'Launches grounded foes, devastates airborne ones.', icon:'☄️'},
 
-  rollDodge:  {id:'rollDodge', name:'Roll Dodge', type:'dodge', dmg:0, range:0, tag:'dash', from:[], cd:520, desc:'Brief invulnerability + reposition.', icon:'🌀'},
-  flashStep:  {id:'flashStep', name:'Flash Step', type:'dodge', dmg:6, range:90, tag:'dash', from:[], cd:560, desc:'Dash through foes, dealing damage.', icon:'💨'},
-  parryStep:  {id:'parryStep', name:'Parry Step', type:'dodge', dmg:0, range:0, tag:'stun', from:[], cd:600, desc:'Sidestep that interrupts nearby attacks.', icon:'🛡️'},
+  rollDodge:  {id:'rollDodge', name:'Roll Dodge', type:'dodge', dmg:0, range:0, tag:'dash', from:[], cd:520, desc:'Long invulnerable roll for repositioning.', icon:'🌀', dashSpeed:760, dashDuration:280, invuln:360},
+  flashStep:  {id:'flashStep', name:'Flash Step', type:'dodge', dmg:6, range:90, tag:'dash', from:[], cd:560, desc:'Long dash through foes, dealing damage.', icon:'💨', dashSpeed:900, dashDuration:260, invuln:220},
+  parryStep:  {id:'parryStep', name:'Parry Step', type:'dodge', dmg:0, range:0, tag:'stun', from:[], cd:600, desc:'Mobile sidestep that interrupts nearby attacks.', icon:'🛡️', dashSpeed:580, dashDuration:220, invuln:360},
+  skywardStep:{id:'skywardStep', name:'Skyward Step', type:'dodge', dmg:0, range:0, tag:'dash', from:[], cd:700, desc:'Launch straight upward to escape the crowd.', icon:'⬆️', dashSpeed:0, dashDuration:0, invuln:460, launchSpeed:1120},
 
   fireball:      {id:'fireball', name:'Fireball', type:'special', dmg:13, range:520, tag:'burn', from:[], cd:900, desc:'Ranged projectile that applies burn.', icon:'🔥'},
   grappleThrow:  {id:'grappleThrow', name:'Grapple Throw', type:'special', dmg:16, range:150, tag:'slam', from:[], cd:900, desc:'Yank a foe close and slam them.', icon:'🪝'},
@@ -289,7 +290,7 @@ const MAX_CLEAVE_TARGETS = 5;
 
 const STARTER_DECK = [
   'jab','jab','cross','risingKnee','uppercut','heavySlam','juggleKick',
-  'rollDodge','rollDodge','flashStep','fireball','whirlwind'
+  'rollDodge','rollDodge','flashStep','skywardStep','fireball','whirlwind'
 ];
 
 const TYPES = ['light','heavy','dodge','special'];
@@ -363,6 +364,7 @@ const player = {
   cardId:null,
   winding:null, windupTimer:0,
   hitFlash:0,
+  knockbackVel:0,
   dashX:0, dashTime:0,
   moving:false,
   walkPhase:0,
@@ -370,6 +372,7 @@ const player = {
 
 // how long (ms) each type's full attack animation plays for, start to finish
 const ATTACK_ANIM_DUR = {light:160, heavy:320, dodge:160, special:260};
+const WAVE_START_INVULN = 2000;
 // extra forward lunges for a few cards, so heavier/committal moves feel like they close distance
 const LUNGE = {cross:60, ironCross:110, vampiricStrike:120, flashJab:34, poisonDart:0};
 
@@ -411,15 +414,20 @@ const ENEMY_BASE = {
   grunt:  {hp:22, speed:105, dmg:8,  radius:24, color:'#c94b6a', xp:10, ranged:false, meleeRange:64, telegraph:520, strike:140, recover:260},
   brute:  {hp:58, speed:66,  dmg:15, radius:32, color:'#8a3fae', xp:22, ranged:false, meleeRange:76, telegraph:760, strike:180, recover:420},
   spitter:{hp:16, speed:88,  dmg:7,  radius:20, color:'#3f9fae', xp:16, ranged:true,  shootRange:480, telegraph:480, strike:120, recover:500},
+  flyer:  {hp:20, speed:130, dmg:9, radius:22, color:'#f2a93b', xp:18, ranged:true, shootRange:360, telegraph:380, strike:120, recover:380, flying:true, hoverHeight:125},
+  boss:   {hp:420, speed:82, dmg:22, radius:52, color:'#b4497d', xp:120, ranged:true, meleeRange:118, shootRange:560, telegraph:820, strike:300, recover:560, boss:true},
 };
 function spawnEnemy(kind, x){
   enemySeq++;
   const base = ENEMY_BASE[kind];
+  const maxHp = base.hp + (base.boss ? state.wave*12 : 0);
   state.enemies.push({
-    id:enemySeq, kind, x, hp:base.hp, maxHp:base.hp, speed:base.speed, dmg:base.dmg,
+    id:enemySeq, kind, x, hp:maxHp, maxHp, speed:base.speed, dmg:base.dmg,
     radius:base.radius, color:base.color, xp:base.xp, ranged:base.ranged,
     meleeRange:base.meleeRange, shootRange:base.shootRange, telegraphDur:base.telegraph,
     strikeDur:base.strike, recoverDur:base.recover,
+    flying:base.flying||false, hoverHeight:base.hoverHeight||0, hoverOffset:rand(0,Math.PI*2),
+    boss:base.boss||false, attackMode:'melee', bossLeap:0,
     airborne:false, vy:0, airTime:0, stagger:0,
     attackState:'chase', stateTimer:0, hasStruck:false,
     dot:null, facing:-1, hitFlash:0, alive:true, spawnAnim:1,
@@ -432,21 +440,28 @@ function waveComposition(wave){
   const grunts = 2 + Math.floor(wave*1.4);
   const brutes = Math.floor(wave/2);
   const spitters = Math.floor((wave-1)/2);
+  const flyers = wave>=4 ? 1+Math.floor((wave-4)/3) : 0;
+  const bosses = wave%10===0 ? 1 : 0;
   for(let i=0;i<grunts;i++) list.push('grunt');
   for(let i=0;i<brutes;i++) list.push('brute');
   for(let i=0;i<spitters;i++) list.push('spitter');
+  for(let i=0;i<flyers;i++) list.push('flyer');
+  for(let i=0;i<bosses;i++) list.push('boss');
   return list;
 }
 
 function startWave(n){
   state.wave = n;
+  player.x = WORLD_W / 2;
+  // Give the player time to reposition before the newly spawned enemies can hurt them.
+  player.invuln = Math.max(player.invuln, WAVE_START_INVULN);
   const comp = waveComposition(n);
   const spread = Math.max(600, comp.length*140);
   comp.forEach((kind,i)=>{
     const x = player.x + 500 + rand(0,spread) + i*40;
     spawnEnemy(kind, clamp(x,0,WORLD_W-40));
   });
-  flashWave('WAVE ' + n);
+  flashWave(n%10===0 ? 'WAVE ' + n + ' — BOSS' : 'WAVE ' + n);
   document.getElementById('wavepill').textContent = 'WAVE ' + n;
 }
 
@@ -509,8 +524,13 @@ function executeCard(card, type){
 
   if(card.tag==='dash'){
     const dir = player.facing;
-    player.dashX = dir*300; player.dashTime = 150;
-    player.invuln = Math.max(player.invuln, (card.id==='rollDodge' || card.id==='parryStep') ? 280 : 120);
+    player.dashX = dir*(card.dashSpeed ?? 300); player.dashTime = card.dashDuration ?? 150;
+    player.invuln = Math.max(player.invuln, card.invuln ?? 120);
+    if(card.launchSpeed){
+      player.vz = Math.max(player.vz, card.launchSpeed);
+      player.z = Math.max(player.z, 1);
+      spawnParticleBurst(player.x, GROUND_Y-30, '#4be8ff', 16);
+    }
   } else if(LUNGE[card.id]){
     player.dashX = player.facing*LUNGE[card.id];
     player.dashTime = card.type==='heavy' ? 130 : 90;
@@ -658,7 +678,8 @@ function applyDamageToEnemy(en, card){
 function spawnProjectile(card, dir){
   state.projectiles.push({
     x:player.x + dir*30, y:GROUND_Y-70-player.z, vx:dir*720, vy:0, card, life:900, friendly:true, r:10,
-    color: card.tag==='burn' ? '#ff9d5c' : card.tag==='bleed' ? '#8aff5c' : '#ffd166'
+    color: card.tag==='burn' ? '#ff9d5c' : card.tag==='bleed' ? '#8aff5c' : '#ffd166',
+    hitEnemyIds: new Set(),
   });
 }
 
@@ -850,6 +871,12 @@ function updatePlayer(dt){
     player.x += mx*player.speed*(dt/1000);
     player.moving = mx!==0;
   }
+  if(Math.abs(player.knockbackVel)>1){
+    player.x += player.knockbackVel * (dt/1000);
+    player.knockbackVel *= Math.pow(0.002, dt/260);
+  } else {
+    player.knockbackVel = 0;
+  }
   if(mx!==0) player.facing = mx>0?1:-1;
   player.x = clamp(player.x, 0, WORLD_W);
 
@@ -873,6 +900,7 @@ function updateEnemies(dt){
     if(!en.alive) continue;
     en.spawnAnim = Math.max(0, en.spawnAnim - dt*0.004);
     if(en.hitFlash>0) en.hitFlash -= dt;
+    if(en.bossLeap>0) en.bossLeap = Math.max(0, en.bossLeap-dt);
 
     if(en.dot){
       en.dot.tick -= dt;
@@ -904,7 +932,7 @@ function updateEnemies(dt){
     updateEnemyFsm(en, d, dx, dt);
 
     // spacing so grounded, non-attacking enemies don't fully stack
-    if(en.attackState==='chase'){
+    if(en.attackState==='chase' && !en.flying){
       for(const other of state.enemies){
         if(other===en || !other.alive) continue;
         const od = other.x-en.x;
@@ -923,6 +951,15 @@ function updateEnemyFsm(en, d, dx, dt){
 
   switch(en.attackState){
     case 'chase': {
+      if(en.boss){
+        if(d>en.shootRange){
+          en.x += Math.sign(dx)*en.speed*(dt/1000);
+        } else {
+          en.attackMode = d>en.meleeRange*1.35 ? 'projectile' : 'leap';
+          en.attackState='windup'; en.stateTimer=en.telegraphDur; en.hasStruck=false;
+        }
+        break;
+      }
       if(en.ranged){
         if(d>range*0.85){
           en.x += Math.sign(dx)*en.speed*(dt/1000);
@@ -943,25 +980,28 @@ function updateEnemyFsm(en, d, dx, dt){
     case 'windup': {
       en.stateTimer -= dt;
       // ranged enemies keep a little distance while charging
-      if(en.ranged && d<en.shootRange*0.4){
+      if(en.ranged && (!en.boss || en.attackMode==='projectile') && d<en.shootRange*0.4){
         en.x -= Math.sign(dx)*en.speed*0.4*(dt/1000);
       }
       if(en.stateTimer<=0){
         en.attackState='strike'; en.stateTimer=en.strikeDur; en.hasStruck=false;
+        if(en.boss && en.attackMode==='leap') en.bossLeap=en.strikeDur;
       }
       break;
     }
     case 'strike': {
-      if(!en.hasStruck){
+      const strikeMoment = !en.boss || en.attackMode==='projectile' || en.stateTimer<=en.strikeDur*0.48;
+      if(!en.hasStruck && strikeMoment){
         en.hasStruck = true;
-        if(en.ranged){
+        if(en.ranged && (!en.boss || en.attackMode==='projectile')){
           const dir = Math.sign(dx)||en.facing;
-          state.projectiles.push({x:en.x,y:GROUND_Y-70,vx:dir*420,vy:0,life:1400,friendly:false,r:8,color:'#3f9fae',dmg:en.dmg});
+          const bossShot = en.boss;
+          state.projectiles.push({x:en.x,y:GROUND_Y-(en.flying ? enemyHeight(en)+55 : 70),vx:dir*(bossShot?520:420),vy:0,life:1400,friendly:false,r:bossShot?16:8,color:en.color,dmg:bossShot?16:en.dmg,sourceX:en.x});
         } else {
-          const inRange = Math.abs(player.x-en.x) <= en.meleeRange+18;
+          const inRange = Math.abs(player.x-en.x) <= en.meleeRange+(en.boss?46:18);
           const jumped = player.z > JUMP_DODGE_HEIGHT;
           if(inRange && !jumped){
-            damagePlayer(en.dmg);
+            damagePlayer(en.dmg, en.x);
           } else if(inRange && jumped){
             spawnPopup(player.x, GROUND_Y-140-player.z, 'DODGED!', '#4be8ff', true);
           }
@@ -979,9 +1019,11 @@ function updateEnemyFsm(en, d, dx, dt){
   }
 }
 
-function damagePlayer(amount){
+function damagePlayer(amount, sourceX){
   if(player.invuln>0) return;
   player.hp = clamp(player.hp-amount,0,player.maxHp);
+  const awayFromAttacker = sourceX == null ? -player.facing : (player.x >= sourceX ? 1 : -1);
+  player.knockbackVel = awayFromAttacker * 520;
   player.hitFlash = 260;
   shakeScreen(6);
   spawnPopup(player.x, GROUND_Y-90-player.z, '-'+amount, '#ff2e88');
@@ -996,15 +1038,15 @@ function updateProjectiles(dt){
   for(const p of state.projectiles){
     if(p.life<=0) continue;
     if(p.friendly){
-      const en = enemiesInRadius(p.x,26)[0];
-      if(en){
+      for(const en of enemiesInRadius(p.x,26)){
+        if(p.hitEnemyIds.has(en.id)) continue;
         applyDamageToEnemy(en, p.card);
         registerComboHit(p.card);
-        p.life=0;
+        p.hitEnemyIds.add(en.id);
       }
     } else {
       if(Math.abs(p.x-player.x) < 26 + p.r && player.invuln<=0 && player.z<JUMP_DODGE_HEIGHT){
-        damagePlayer(p.dmg||6);
+        damagePlayer(p.dmg||6, p.sourceX);
         p.life=0;
       }
     }
@@ -1478,10 +1520,17 @@ function drawPlayerAttackFlare(){
 }
 
 /* ---- enemies ---- */
+function enemyHeight(en){
+  const hover = en.flying ? en.hoverHeight + Math.sin(state.time*0.006 + en.hoverOffset)*12 : 0;
+  const launched = en.airborne ? Math.max(0,-en.vy*0.06+40) : 0;
+  const leap = en.bossLeap>0 ? Math.sin((1-en.bossLeap/en.strikeDur)*Math.PI)*125 : 0;
+  return hover + launched + leap;
+}
+
 function drawEnemy(en){
   const scale = en.spawnAnim>0 ? 1-en.spawnAnim : 1;
   if(scale<=0) return;
-  const z = en.airborne ? Math.max(0,-en.vy*0.06+40) : 0;
+  const z = enemyHeight(en);
   drawShadow(en.x, z, en.radius*0.9);
 
   drawEnemyTelegraph(en);
@@ -1496,15 +1545,30 @@ function drawEnemy(en){
   if(en.kind==='brute'){
     roundRect(-24,-70,48,64,10); ctx.fill();
     ctx.beginPath(); ctx.arc(0,-84,17,0,Math.PI*2); ctx.fill();
+  } else if(en.kind==='boss'){
+    roundRect(-42,-118,84,108,16); ctx.fill();
+    ctx.beginPath(); ctx.arc(0,-143,29,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = flash? '#ffffff' : '#6b294f';
+    roundRect(-54,-90,16,58,8); ctx.fill();
+    roundRect(38,-90,16,58,8); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-24,-164); ctx.lineTo(-43,-184); ctx.lineTo(-10,-167); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(24,-164); ctx.lineTo(43,-184); ctx.lineTo(10,-167); ctx.closePath(); ctx.fill();
   } else if(en.kind==='spitter'){
     roundRect(-16,-56,32,46,8); ctx.fill();
     ctx.beginPath(); ctx.arc(0,-68,13,0,Math.PI*2); ctx.fill();
+  } else if(en.kind==='flyer'){
+    ctx.fillStyle = flash? '#ffffff' : '#d47a28';
+    ctx.beginPath(); ctx.moveTo(-8,-48); ctx.lineTo(-44,-66); ctx.lineTo(-22,-24); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(8,-48); ctx.lineTo(44,-66); ctx.lineTo(22,-24); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = flash? '#ffffff' : en.color;
+    ctx.beginPath(); ctx.arc(0,-48,18,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0,-70,12,0,Math.PI*2); ctx.fill();
   } else {
     roundRect(-18,-60,36,50,8); ctx.fill();
     ctx.beginPath(); ctx.arc(0,-72,14,0,Math.PI*2); ctx.fill();
   }
   ctx.fillStyle='#0a0710';
-  ctx.fillRect(-8,en.kind==='brute'?-88:-72,16,4);
+  ctx.fillRect(-8,en.kind==='boss'?-147:en.kind==='brute'?-88:en.kind==='flyer'?-73:-72,16,4);
 
   if(en.dot){
     ctx.fillStyle = en.dot.color;
@@ -1515,7 +1579,7 @@ function drawEnemy(en){
   ctx.restore();
 
   if(en.hp<en.maxHp && en.alive){
-    const w=44;
+    const w=en.boss?84:44;
     ctx.fillStyle='rgba(0,0,0,0.5)';
     ctx.fillRect(en.x-w/2, GROUND_Y-en.radius*2-24-z, w, 6);
     ctx.fillStyle = en.hp/en.maxHp>0.3?'#5dffb0':'#ff2e88';
@@ -1528,20 +1592,21 @@ function drawEnemy(en){
 function drawEnemyTelegraph(en){
   if(en.attackState==='windup'){
     const t = 1-(en.stateTimer/en.telegraphDur); // 0 -> 1 as the swing approaches
+    const z = enemyHeight(en);
     ctx.save();
-    ctx.translate(en.x, GROUND_Y-en.radius*2-8);
+    ctx.translate(en.x, GROUND_Y-en.radius*2-8-z);
 
-    if(en.ranged){
+    if(en.ranged && (!en.boss || en.attackMode==='projectile')){
       const pulse = 0.5+0.5*Math.sin(state.time*0.02);
       ctx.globalAlpha = 0.35+0.35*t;
-      ctx.strokeStyle='#3f9fae';
+      ctx.strokeStyle=en.color;
       ctx.lineWidth=3;
       ctx.beginPath(); ctx.arc(0,0, 14+pulse*6, 0, Math.PI*2); ctx.stroke();
       ctx.restore();
       // warning chevron
       ctx.save();
       ctx.globalAlpha = 0.25+0.5*t;
-      ctx.fillStyle='#3f9fae';
+      ctx.fillStyle=en.color;
       ctx.beginPath();
       ctx.moveTo(-8,-20); ctx.lineTo(8,-20); ctx.lineTo(0,-30);
       ctx.closePath(); ctx.fill();
@@ -1553,14 +1618,14 @@ function drawEnemyTelegraph(en){
     ctx.restore();
     ctx.save();
     ctx.globalAlpha = 0.12+0.22*t;
-    ctx.fillStyle = '#ff2e88';
+    ctx.fillStyle = en.boss ? '#b4497d' : '#ff2e88';
     const dir = en.facing;
     ctx.fillRect(en.x + (dir>0?0:-en.meleeRange), GROUND_Y-6, en.meleeRange, 8);
     ctx.restore();
 
     // the swinging rectangle "club" -- rotates from raised to striking
     ctx.save();
-    ctx.translate(en.x, GROUND_Y-en.radius*2+6);
+    ctx.translate(en.x, GROUND_Y-en.radius*2+6-z);
     ctx.scale(en.facing,1);
     const angle = -1.3 + t*1.3; // raised behind -> overhead -> about to strike
     ctx.rotate(angle);
@@ -1569,15 +1634,16 @@ function drawEnemyTelegraph(en){
     ctx.restore();
 
     if(t<0.08){
-      spawnPopup(en.x, GROUND_Y-en.radius*2-30, '!', '#ff2e88', true);
+      spawnPopup(en.x, GROUND_Y-en.radius*2-30-z, '!', en.boss?'#b4497d':'#ff2e88', true);
     }
   } else if(en.attackState==='strike'){
+    const z = enemyHeight(en);
     ctx.save();
-    ctx.translate(en.x, GROUND_Y-en.radius*2+6);
+    ctx.translate(en.x, GROUND_Y-en.radius*2+6-z);
     ctx.scale(en.facing,1);
     ctx.globalAlpha=0.85;
-    ctx.fillStyle = '#ff2e88';
-    ctx.fillRect(0,-6, 46, 12);
+    ctx.fillStyle = en.boss ? '#b4497d' : '#ff2e88';
+    ctx.fillRect(0,-6, en.boss?78:46, en.boss?18:12);
     ctx.restore();
   }
 }
@@ -1713,7 +1779,7 @@ function resetRun(){
   state.pending=[];
   state.enemies=[]; state.projectiles=[]; state.particles=[];
   fx.length=0;
-  player.hp=player.maxHp; player.x=300; player.z=0; player.vz=0; player.invuln=1000;
+  player.hp=player.maxHp; player.x=300; player.z=0; player.vz=0; player.invuln=1000; player.knockbackVel=0;
   player.winding=null; player.windupTimer=0;
   buildQueues();
   updateComboUI();

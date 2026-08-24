@@ -166,6 +166,7 @@
   #statLine{display:flex;gap:26px;flex-wrap:wrap;justify-content:center;margin-top:6px;}
   #statLine div{font-family:'Orbitron';font-size:13px;color:var(--ink-dim);}
   #statLine b{color:var(--gold);}
+  #deathHint{max-width:520px;color:var(--cyan);font-size:14px;letter-spacing:.5px;line-height:1.45;}
 </style>
 </head>
 <body>
@@ -240,6 +241,7 @@
   <div id="overOverlay" class="overlay hidden">
     <div class="titlemain" style="font-size:clamp(30px,6vw,52px)">YOU ARE BROKEN</div>
     <div id="statLine"></div>
+    <div id="deathHint"></div>
     <button class="bigbtn" id="restartBtn">REBUILD THE DECK</button>
   </div>
 
@@ -332,6 +334,13 @@ function shuffle(arr){
   for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];}
   return a;
 }
+const DEATH_HINTS = [
+  'Cycle between J and K for powerful combos.',
+  'Defeat the ranged enemies first.',
+  'Every multihit card shuffles your deck.',
+  'Beat the boss every 10 waves.',
+];
+let deathHintIndex = 0;
 
 /* ============================== GAME STATE ============================== */
 const state = {
@@ -347,6 +356,8 @@ const state = {
   cooldown: {light:0,heavy:0,dodge:0,special:0},
   combo: {count:0, timer:0, lastTag:null, window:1600},
   buffHits:0,
+  dodgeBuff:1,
+  dodgeBuffTimer:0,
   pending:[],           // queued attacks waiting on their windup
   enemies: [],
   projectiles: [],
@@ -360,6 +371,7 @@ const player = {
   facing:1,
   speed: 300,
   invuln:0,
+  dodgeInvuln:0,
   attackAnim:0,
   attackAnimTotal:0,
   attackWindupDur:0,
@@ -530,7 +542,9 @@ function executeCard(card, type){
   if(card.tag==='dash'){
     const dir = player.facing;
     player.dashX = dir*(card.dashSpeed ?? 300); player.dashTime = card.dashDuration ?? 150;
-    player.invuln = Math.max(player.invuln, card.invuln ?? 120);
+    const invulnTime = card.invuln ?? 120;
+    player.invuln = Math.max(player.invuln, invulnTime);
+    player.dodgeInvuln = Math.max(player.dodgeInvuln, invulnTime);
     if(card.launchSpeed){
       player.vz = Math.max(player.vz, card.launchSpeed);
       player.z = Math.max(player.z, 1);
@@ -633,6 +647,7 @@ function applyDamageToEnemy(en, card){
     comboLabel = 'PERFECT LINK!';
   }
   if(state.buffHits>0){ mult *= 1.5; state.buffHits--; }
+  if(state.dodgeBuffTimer>0) mult *= state.dodgeBuff;
   const scale = 1 + Math.min(state.combo.count*0.045, 0.7);
   const dmg = Math.round(card.dmg * mult * scale);
   en.hp -= dmg;
@@ -865,6 +880,10 @@ function update(dt){
     state.combo.timer -= dt;
     if(state.combo.timer<=0){ state.combo.count=0; state.combo.lastTag=null; updateComboUI(); }
   }
+  if(state.dodgeBuffTimer>0){
+    state.dodgeBuffTimer -= dt;
+    if(state.dodgeBuffTimer<=0) state.dodgeBuff=1;
+  }
 
   // pending (windup) attacks
   for(const p of state.pending){ p.timer -= dt; }
@@ -921,6 +940,7 @@ function updatePlayer(dt){
   if(player.attackAnim>0) player.attackAnim -= dt;
   if(player.windupTimer>0){ player.windupTimer -= dt; if(player.windupTimer<=0) player.winding=null; }
   if(player.invuln>0) player.invuln -= dt;
+  if(player.dodgeInvuln>0) player.dodgeInvuln -= dt;
   if(player.hitFlash>0) player.hitFlash -= dt;
 }
 
@@ -1035,7 +1055,12 @@ function updateEnemyFsm(en, d, dx, dt){
           const inRange = Math.abs(player.x-en.x) <= en.meleeRange+(en.boss?46:18);
           const jumped = player.z > JUMP_DODGE_HEIGHT;
           if(inRange && !jumped){
-            damagePlayer(en.dmg, en.x);
+            if(player.dodgeInvuln>0){
+              registerSuccessfulDodge();
+              spawnPopup(player.x, GROUND_Y-140-player.z, 'DODGED!', '#4be8ff', true);
+            } else {
+              damagePlayer(en.dmg, en.x);
+            }
           } else if(inRange && jumped){
             spawnPopup(player.x, GROUND_Y-140-player.z, 'DODGED!', '#4be8ff', true);
           }
@@ -1063,6 +1088,12 @@ function damagePlayer(amount, sourceX){
   spawnPopup(player.x, GROUND_Y-90-player.z, '-'+amount, '#ff2e88');
 }
 
+function registerSuccessfulDodge(){
+  state.dodgeBuff = Math.min(2, state.dodgeBuff*1.2);
+  state.dodgeBuffTimer = 5000;
+  spawnPopup(player.x, GROUND_Y-116-player.z, 'DODGE BOOST x'+state.dodgeBuff.toFixed(2), '#ffd166', true);
+}
+
 function updateProjectiles(dt){
   for(const p of state.projectiles){
     p.x += p.vx*(dt/1000);
@@ -1079,9 +1110,15 @@ function updateProjectiles(dt){
         p.hitEnemyIds.add(en.id);
       }
     } else {
-      if(Math.abs(p.x-player.x) < 26 + p.r && player.invuln<=0 && player.z<JUMP_DODGE_HEIGHT){
-        damagePlayer(p.dmg||6, p.sourceX);
-        p.life=0;
+      if(Math.abs(p.x-player.x) < 26 + p.r && player.z<JUMP_DODGE_HEIGHT){
+        if(player.dodgeInvuln>0){
+          registerSuccessfulDodge();
+          spawnPopup(player.x, GROUND_Y-140-player.z, 'DODGED!', '#4be8ff', true);
+          p.life=0;
+        } else if(player.invuln<=0){
+          damagePlayer(p.dmg||6, p.sourceX);
+          p.life=0;
+        }
       }
     }
   }
@@ -1815,6 +1852,8 @@ function drawFx(){
 /* ============================== GAME OVER / START ============================== */
 function gameOver(){
   state.running=false;
+  document.getElementById('deathHint').textContent = 'TIP: ' + DEATH_HINTS[deathHintIndex];
+  deathHintIndex = (deathHintIndex+1) % DEATH_HINTS.length;
   const statline = document.getElementById('statLine');
   statline.innerHTML = `
     <div>WAVE REACHED<br><b>${state.wave}</b></div>
@@ -1829,10 +1868,11 @@ function resetRun(){
   state.wave = 1; state.score=0; state.killsThisRun=0;
   state.combo = {count:0,timer:0,lastTag:null,window:1600};
   state.buffHits=0;
+  state.dodgeBuff=1; state.dodgeBuffTimer=0;
   state.pending=[];
   state.enemies=[]; state.projectiles=[]; state.particles=[];
   fx.length=0;
-  player.hp=player.maxHp; player.x=300; player.z=0; player.vz=0; player.invuln=1000; player.knockbackVel=0;
+  player.hp=player.maxHp; player.x=300; player.z=0; player.vz=0; player.invuln=1000; player.dodgeInvuln=0; player.knockbackVel=0;
   player.winding=null; player.windupTimer=0;
   buildQueues();
   updateComboUI();

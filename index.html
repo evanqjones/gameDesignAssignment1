@@ -413,6 +413,10 @@ const state = {
   lastBoss:null,
   waveEndRank:null,
   finalBossUnlocked:false, finalBossPending:false, finalBossActive:false, finalBossDefeated:false,
+  finalDuelPhase:0,
+  finalPhaseFlash:0,
+  finalBossDeath:null,
+  healthOrbs:[], healthOrbTimer:9000,
   tutorialIndex:0, tutorialTimer:0,
   tutorialOverride:'', tutorialOverrideTimer:0,
   deckTutorialPause:false,
@@ -440,6 +444,7 @@ const player = {
   dashCardId:null,
   dashHitEnemies:new Set(),
   parryTimer:0,
+  finalRainbow:false,
   moving:false,
   walkPhase:0,
 };
@@ -502,7 +507,7 @@ const ENEMY_BASE = {
   bossWalker:{hp:460, speed:118, dmg:28, radius:48, color:'#e13f3f', xp:140, ranged:false, meleeRange:126, telegraph:720, strike:260, recover:420, boss:true},
   bossGunner:{hp:410, speed:78, dmg:10, radius:46, color:'#35c2d4', xp:150, ranged:true, shootRange:640, telegraph:720, strike:620, recover:600, boss:true, burstBoss:true},
   bossUfo:{hp:440, speed:155, dmg:12, radius:50, color:'#b66cff', xp:165, ranged:true, shootRange:700, telegraph:580, strike:620, recover:380, boss:true, ufoBoss:true, flying:true, hoverHeight:210},
-  rainbowNemesis:{hp:1250,speed:245,dmg:18,radius:28,color:'#ffffff',xp:1000,ranged:false,meleeRange:120,shootRange:760,telegraph:360,strike:620,recover:180,boss:true,rainbowNemesis:true},
+  rainbowNemesis:{hp:500,speed:245,dmg:12,radius:28,color:'#ffffff',xp:1000,ranged:false,meleeRange:120,shootRange:760,telegraph:360,strike:620,recover:180,boss:true,rainbowNemesis:true},
 };
 function spawnEnemy(kind, x){
   enemySeq++;
@@ -563,9 +568,12 @@ function startWave(n){
   state.wave = n;
   state.waveEndRank=null;
   chooseWaveObjective(n);
-  const finalDuel=n===50;
+  const finalDuel=n===30;
   state.finalBossPending=finalDuel;
-  if(finalDuel) state.objective={type:'eliminate',label:'FINAL DUEL',timer:0,spawnTimer:0,orbX:0,orbHp:0,goalX:0};
+  if(finalDuel){
+    state.finalDuelPhase=1;
+    state.objective={type:'finalDefense',label:'DEFEND THE UNKNOWN ORB',timer:20000,spawnTimer:0,orbX:WORLD_W/2,orbHp:180,goalX:0};
+  }
   // Projectiles pause during the reward screen; remove any leftovers before new enemies spawn.
   state.projectiles = [];
   player.x = WORLD_W / 2;
@@ -584,8 +592,10 @@ function startWave(n){
   if(finalDuel){
     state.finalBossPending=false; state.finalBossActive=true;
     state.enemies=state.enemies.filter(en=>en.rainbowNemesis);
-    flashWave('FINAL DUEL - THE PRISMATIC ECHO');
-    announce('ONLY RAINBOW ATTACKS CAN HURT IT','#ffd166');
+    const rival=state.enemies[0];
+    if(rival){ rival.shieldMax=180; rival.shieldHp=180; rival.shieldRegenTimer=0; }
+    flashWave('WAVE 30 - SOMETHING WAITS');
+    announce('DEFEND THE ORB - 20 SECONDS','#ffd166');
   }
   if(state.objective.type==='bossRush'){
     for(const en of state.enemies.filter(en=>en.boss)){
@@ -608,11 +618,11 @@ function startWave(n){
     beginDeckTutorial();
   }
   if(finalDuel){
-    flashWave('FINAL DUEL - THE PRISMATIC ECHO');
-    announce('ONLY RAINBOW ATTACKS CAN HURT IT','#ffd166');
+    flashWave('WAVE 30 - SOMETHING WAITS');
+    announce('DEFEND THE ORB - 20 SECONDS','#ffd166');
   }
-  if(!finalDuel&&n<50&&n%10===0) showFinalCountdown((50-n)+' WAVES REMAINING','THE PRISMATIC ECHO WAITS ON WAVE 50.');
-  else if(n===49) showFinalCountdown('IT\u2019S TIME','THIS IS YOUR FINAL PREPARATION WAVE. THE PRISMATIC ECHO IS NEXT.');
+  if(!finalDuel&&n<30&&n%10===0) showFinalCountdown((30-n)+' WAVES REMAINING','SOMETHING POWERFUL IS WAITING ABOVE.');
+  else if(n===29) showFinalCountdown('IT\u2019S TIME','THE AIR IS WRONG. WHATEVER WAITS ON WAVE 30 IS CLOSE.');
 }
 
 function showFinalCountdown(title,subtitle){
@@ -650,7 +660,7 @@ function updateObjectiveHUD(){
   const el=document.getElementById('objectivepill');
   if(!el) return;
   const o=state.objective;
-  if(o.type==='defend') el.textContent=o.label+' '+Math.ceil(o.timer/1000)+'s · ORB '+Math.ceil(o.orbHp);
+  if(o.type==='defend'||o.type==='finalDefense') el.textContent=o.label+' '+Math.ceil(o.timer/1000)+'s · ORB '+Math.ceil(o.orbHp);
   else if(o.type==='goal') el.textContent=o.label+' '+Math.round(Math.abs(player.x-o.goalX))+'m';
   else el.textContent=o.label;
 }
@@ -857,13 +867,29 @@ function interruptEnemyAttack(en){
 }
 
 function applyDamageToEnemy(en, card){
-  if(en.rainbowNemesis&&!card.rainbow){
-    en.hitFlash=55;
-    spawnPopup(en.x,GROUND_Y-125,'IMMUNE - USE RAINBOW!','#ffd166',true);
-    return 0;
-  }
   let mult = 1;
   let comboLabel = null;
+  if(en.rainbowNemesis){
+    const away=Math.sign(en.x-player.x)||player.facing;
+    if(state.finalDuelPhase===1){
+      en.knockbackVel+=away*(card.rainbow?2200:1400);
+      en.hitFlash=55;
+      return 0;
+    }
+    if(en.shieldHp>0){
+      if(card.rainbow){
+        const shieldDamage=en.shieldHp;
+        en.shieldHp=Math.max(0,en.shieldHp-shieldDamage);
+        en.hitFlash=90;
+        spawnPopup(en.x,GROUND_Y-135,'RAINBOW SHIELD SHATTERED!','#4be8ff',true);
+        spawnParticleBurst(en.x,GROUND_Y-65,'#ffffff',12);
+        if(en.shieldHp<=0){ en.shieldRegenTimer=10000; announce('RAINBOW SHIELD BROKEN - ATTACK!','#ffd166'); shakeScreen(16); }
+        return 0;
+      }
+      mult=.18;
+      comboLabel='SHIELDED CHIP';
+    }
+  }
   if(en.armored && !en.armorBroken){
     if(card.type==='heavy'){
       en.armorBroken=true; en.stagger=Math.max(en.stagger,650);
@@ -954,7 +980,7 @@ function applyDamageToEnemy(en, card){
     state.score += 50 + state.wave*5;
     state.killsThisRun++;
     spawnParticleBurst(en.x, enY+30, en.color, 18);
-    if(en.rainbowNemesis){ state.finalBossActive=false; state.finalBossDefeated=true; state.slowMoTimer=1500; announce('PRISMATIC ECHO SHATTERED!','#ffd166'); }
+    if(en.rainbowNemesis){ beginFinalBossDeath(en.x); }
     else if(en.boss){ state.slowMoTimer=900; announce('BOSS BREAKER!','#ffd166'); shakeScreen(20); }
   }
   return dmg;
@@ -1049,12 +1075,13 @@ function namedCombo(name,color,points){
 
 function dealComboDamage(en,amount){
   if(!en.alive) return;
-  if(en.rainbowNemesis) return;
+  if(en.rainbowNemesis&&(state.finalDuelPhase===1||en.shieldHp>0)) return;
   en.hp-=amount;
   if(en.hp<=0){
     en.alive=false; state.score+=50+state.wave*5; state.killsThisRun++;
     spawnParticleBurst(en.x,GROUND_Y-45,en.color,18);
-    if(en.boss){ state.slowMoTimer=900; announce('BOSS BREAKER!','#ffd166'); shakeScreen(20); }
+    if(en.rainbowNemesis) beginFinalBossDeath(en.x);
+    else if(en.boss){ state.slowMoTimer=900; announce('BOSS BREAKER!','#ffd166'); shakeScreen(20); }
   }
 }
 
@@ -1220,6 +1247,8 @@ function loop(t){
 
 function update(dt){
   state.time += dt;
+  updateFinalBossDeath(dt);
+  if(state.finalPhaseFlash>0) state.finalPhaseFlash=Math.max(0,state.finalPhaseFlash-dt);
 
   updateTutorialHints(dt);
   if(state.rankHintCooldown>0) state.rankHintCooldown=Math.max(0,state.rankHintCooldown-dt);
@@ -1261,6 +1290,7 @@ function update(dt){
   updatePlayer(dt);
   updateEnemies(dt);
   updateProjectiles(dt);
+  updateHealthOrbs(dt);
   updateParticles(dt);
   updateFx(dt);
   updateObjectives(dt);
@@ -1292,7 +1322,8 @@ function updatePlayer(dt){
         if(!en.alive||player.dashHitEnemies.has(en)||Math.abs(en.x-player.x)>en.radius+30) continue;
         player.dashHitEnemies.add(en);
         const away=Math.sign(en.x-player.x)||player.facing;
-        en.knockbackVel+=away*(en.boss?620:1500);
+        const bossForce=en.rainbowNemesis&&state.finalDuelPhase===1?2700:620;
+        en.knockbackVel+=away*(en.boss?bossForce:1500);
         en.stagger=Math.max(en.stagger,en.boss?260:650);
         if(!en.boss){ en.airborne=true; en.vy=Math.min(en.vy,-360); en.airTime=Math.max(en.airTime,760); en.spinVel+=away*14; }
         spawnPopup(en.x,GROUND_Y-105,'REPEL!','#5dffb0',true);
@@ -1339,6 +1370,10 @@ function updateEnemies(dt){
     if(en.collisionCooldown>0) en.collisionCooldown=Math.max(0,en.collisionCooldown-dt);
     if(en.phaseCooldown>0) en.phaseCooldown=Math.max(0,en.phaseCooldown-dt);
     if(en.phaseTimer>0) en.phaseTimer=Math.max(0,en.phaseTimer-dt);
+    if(en.rainbowNemesis&&state.finalDuelPhase===2&&en.shieldHp<=0&&en.shieldRegenTimer>0){
+      en.shieldRegenTimer=Math.max(0,en.shieldRegenTimer-dt);
+      if(en.shieldRegenTimer<=0){ en.shieldHp=en.shieldMax; announce('THE RAINBOW SHIELD REFORMS!','#4be8ff'); }
+    }
     if(en.boss&&!en.rainbowNemesis&&!en.phase2&&en.hp<=en.maxHp*0.5){
       en.phase2=true; en.phaseTimer=6500; en.phaseCooldown=500;
       announce(en.kind==='bossWalker'?'PREDATOR LEAPS!':en.kind==='bossGunner'?'CROSSFIRE PHASE!':en.kind==='swordbound'?'FRENZY LEAPS!':'GROUND SWEEP!','#ff2e88');
@@ -1586,15 +1621,13 @@ function updateEnemyFsm(en, d, dx, dt){
 }
 
 function nemesisComboHit(en,amount){
-  const previous=en.nemesisCombo;
-  en.nemesisCombo+=amount;
-  const rank=comboRank(en.nemesisCombo);
-  spawnPopup(en.x,GROUND_Y-145-enemyHeight(en),'RIVAL '+rank+' - '+en.nemesisCombo+' HIT','#ffd166',true);
-  if((previous<18&&en.nemesisCombo>=18)||(previous<26&&en.nemesisCombo>=26)||(previous<36&&en.nemesisCombo>=36)) announce('RIVAL '+rank+' RANK','#ff2e88');
+  // The rival no longer tracks or displays its own combo rank.
 }
 
 function updateRainbowNemesis(en,dt){
-  const dx=player.x-en.x, d=Math.abs(dx);
+  const defensePhase=state.finalDuelPhase===1;
+  const targetX=defensePhase?state.objective.orbX:player.x;
+  const dx=targetX-en.x, d=Math.abs(dx);
   en.facing=dx>=0?1:-1;
   const frenzy=en.hp<=en.maxHp*.5;
   if(frenzy&&!en.phase2){ en.phase2=true; announce('PRISMATIC OVERDRIVE!','#ff2e88'); shakeScreen(14); }
@@ -1623,20 +1656,20 @@ function updateRainbowNemesis(en,dt){
       en.attackState='nemesisFault'; en.stateTimer=0; en.faultIndex=0;
     } else {
       if(action==='flurry'){
-        if(d<135&&player.invuln<=0) damagePlayer(14,en.x,1150);
-        const aimX=player.x-en.x, aimY=(GROUND_Y-70-player.z)-(GROUND_Y-82-enemyHeight(en));
+        if(d<135) nemesisStrikeTarget(9,en.x,1150);
+        const aimX=targetX-en.x, aimY=(GROUND_Y-70-(defensePhase?0:player.z))-(GROUND_Y-82-enemyHeight(en));
         const len=Math.max(1,Math.hypot(aimX,aimY));
-        state.projectiles.push({x:en.x,y:GROUND_Y-82-enemyHeight(en),vx:aimX/len*720,vy:aimY/len*720,life:1500,friendly:false,r:16,color:`hsl(${state.time*.22%360},100%,65%)`,dmg:12,sourceX:en.x,knockbackForce:1150});
+        state.projectiles.push({x:en.x,y:GROUND_Y-82-enemyHeight(en),vx:aimX/len*720,vy:aimY/len*720,life:1500,friendly:false,r:16,color:`hsl(${state.time*.22%360},100%,65%)`,dmg:8,sourceX:en.x,knockbackForce:1150});
         nemesisComboHit(en,7);
       } else if(action==='titanUppercut'){
         en.x=clamp(en.x+en.facing*Math.min(180,d),40,WORLD_W-40);
         fx.push({kind:'slash',x:en.x,y:GROUND_Y-95,facing:en.facing,life:320,maxLife:320,color:'#ff5d5d',big:true});
-        if(Math.abs(player.x-en.x)<145&&player.z<100) damagePlayer(24,en.x,1450);
+        if(Math.abs(targetX-en.x)<145&&(defensePhase||player.z<100)) nemesisStrikeTarget(15,en.x,1450);
         nemesisComboHit(en,2);
       } else if(action==='spectrumBeam'){
         fx.push({kind:'beam',x:en.x+en.facing*30,y:GROUND_Y-90-enemyHeight(en),facing:en.facing,life:380,maxLife:380,length:760});
-        const inFront=en.facing>0?player.x>en.x:player.x<en.x;
-        if(inFront&&Math.abs(player.x-en.x)<790&&player.z<115) damagePlayer(22,en.x,1250);
+        const inFront=en.facing>0?targetX>en.x:targetX<en.x;
+        if(inFront&&Math.abs(targetX-en.x)<790&&(defensePhase||player.z<115)) nemesisStrikeTarget(14,en.x,1250);
         nemesisComboHit(en,2);
       }
       en.attackState='recover'; en.stateTimer=frenzy?260:420;
@@ -1648,7 +1681,7 @@ function updateRainbowNemesis(en,dt){
     en.x=clamp(en.x+en.dashDir*(frenzy?1200:980)*(dt/1000),40,WORLD_W-40);
     en.stateTimer-=dt;
     fx.push({kind:'trail',x:en.x,y:GROUND_Y-60-enemyHeight(en),facing:-en.dashDir,life:120,maxLife:120,color:`hsl(${state.time*.22%360},100%,65%)`});
-    if(!en.hasStruck&&Math.abs(player.x-en.x)<60){ en.hasStruck=true; damagePlayer(12,en.x,1350); nemesisComboHit(en,2); }
+    if(!en.hasStruck&&Math.abs(targetX-en.x)<60){ en.hasStruck=true; nemesisStrikeTarget(8,en.x,1350); nemesisComboHit(en,2); }
     if(en.stateTimer<=0){ en.attackState='recover'; en.stateTimer=240; }
     return;
   }
@@ -1659,7 +1692,7 @@ function updateRainbowNemesis(en,dt){
       const blastX=en.x+en.facing*(105+en.faultIndex*105);
       const color=`hsl(${(state.time*.22+en.faultIndex*80)%360},100%,65%)`;
       fx.push({kind:'ring',x:blastX,y:GROUND_Y-4,life:330,maxLife:330,color,radius:92});
-      if(Math.abs(player.x-blastX)<82&&player.z<45) damagePlayer(10,en.x,1100);
+      if(Math.abs(targetX-blastX)<82&&(defensePhase||player.z<45)) nemesisStrikeTarget(7,en.x,1100);
       en.faultIndex++; en.stateTimer=105; nemesisComboHit(en,1);
     }
     if(en.faultIndex>=4&&en.stateTimer<=0){ en.attackState='recover'; en.stateTimer=300; }
@@ -1668,6 +1701,11 @@ function updateRainbowNemesis(en,dt){
 
   en.stateTimer-=dt;
   if(en.stateTimer<=0){ en.attackState='chase'; en.stateTimer=frenzy?420:650; en.bossLeap=620; }
+}
+
+function nemesisStrikeTarget(amount,sourceX,knockbackForce){
+  if(state.finalDuelPhase===1) damageOrb(amount);
+  else damagePlayer(amount,sourceX,knockbackForce);
 }
 
 function fireEnemyBall(en,vx,vy,damage,radius){
@@ -1749,7 +1787,7 @@ function damagePlayer(amount, sourceX, knockbackForce=520){
 }
 
 function damageOrb(amount){
-  if(state.objective.type!=='defend'||state.objective.orbHp<=0) return;
+  if((state.objective.type!=='defend'&&state.objective.type!=='finalDefense')||state.objective.orbHp<=0) return;
   state.objective.orbHp=Math.max(0,state.objective.orbHp-amount);
   spawnPopup(state.objective.orbX,GROUND_Y-105,'-'+amount,'#ff2e88',true);
   spawnParticleBurst(state.objective.orbX,GROUND_Y-45,'#4be8ff',12);
@@ -1795,6 +1833,12 @@ function updateProjectiles(dt){
         p.hitEnemyIds.add(en.id);
       }
     } else {
+      if(state.objective.type==='finalDefense'){
+        const orbY=GROUND_Y-44;
+        if(Math.hypot(p.x-state.objective.orbX,p.y-orbY)<38+p.r){
+          damageOrb(p.dmg||6); p.life=0; continue;
+        }
+      }
       const playerY=GROUND_Y-70-player.z;
       if(Math.hypot(p.x-player.x,p.y-playerY)<26+p.r){
         if(player.dodgeInvuln>0){
@@ -1809,6 +1853,27 @@ function updateProjectiles(dt){
     }
   }
   state.projectiles = state.projectiles.filter(p=>p.life>0 && p.x>-100 && p.x<WORLD_W+100);
+}
+
+function updateHealthOrbs(dt){
+  state.healthOrbTimer-=dt;
+  if(state.healthOrbTimer<=0){
+    state.healthOrbTimer=rand(10500,14500);
+    if(player.hp<player.maxHp) state.healthOrbs.push({x:clamp(player.x+rand(-340,340),50,WORLD_W-50),y:-40,vy:90,life:12000,grounded:false});
+  }
+  for(const orb of state.healthOrbs){
+    orb.life-=dt;
+    if(!orb.grounded){
+      orb.vy+=520*(dt/1000); orb.y+=orb.vy*(dt/1000);
+      if(orb.y>=GROUND_Y-25){ orb.y=GROUND_Y-25; orb.vy=0; orb.grounded=true; spawnParticleBurst(orb.x,GROUND_Y-18,'#5dffb0',16); }
+    } else orb.y=GROUND_Y-25+Math.sin(state.time*.008+orb.x)*7;
+    if(orb.grounded&&Math.abs(player.x-orb.x)<42&&player.z<65){
+      player.hp=Math.min(player.maxHp,player.hp+25); orb.life=0;
+      spawnPopup(player.x,GROUND_Y-115-player.z,'+25 HP','#5dffb0',true);
+      spawnParticleBurst(orb.x,orb.y,'#5dffb0',22);
+    }
+  }
+  state.healthOrbs=state.healthOrbs.filter(orb=>orb.life>0);
 }
 
 function updateParticles(dt){
@@ -1833,14 +1898,52 @@ function updateFx(dt){
 let waveTransitioning=false;
 function checkWaveClear(){
   if(waveTransitioning) return;
+  if(state.finalBossDeath) return;
   if(state.running && (state.objective.type==='eliminate'||state.objective.type==='bossRush') && state.enemies.length===0){
-    if(state.wave===50&&state.finalBossDefeated){
+    if(state.wave===30&&state.finalBossDefeated){
       finalVictory();
       return;
     }
     captureWaveRank();
     waveTransitioning = true;
     setTimeout(()=>openReward(), 500);
+  }
+}
+
+function beginFinalBossDeath(x){
+  state.finalBossActive=false;
+  state.finalBossDeath={x,timer:2400,burstTimer:0,burstCount:0};
+  state.slowMoTimer=900;
+  announce('PRISMATIC ECHO SHATTERED!','#ffd166');
+  shakeScreen(24);
+  const colors=['#ff4d6d','#ff9d5c','#ffd166','#5dffb0','#4be8ff','#6f7dff','#b66cff'];
+  for(const color of colors) spawnParticleBurst(x+rand(-24,24),GROUND_Y-rand(30,120),color,14);
+  fx.push({kind:'ring',x,y:GROUND_Y-4,life:900,maxLife:900,color:'#ffffff',radius:280});
+}
+
+function updateFinalBossDeath(dt){
+  const death=state.finalBossDeath;
+  if(!death) return;
+  death.timer-=dt; death.burstTimer-=dt;
+  if(death.burstTimer<=0){
+    death.burstTimer=150; death.burstCount++;
+    const colors=['#ff4d6d','#ff9d5c','#ffd166','#5dffb0','#4be8ff','#6f7dff','#b66cff'];
+    const color=colors[death.burstCount%colors.length];
+    const bx=death.x+rand(-85,85), by=GROUND_Y-rand(25,155);
+    spawnParticleBurst(bx,by,color,18);
+    fx.push({kind:'shock',x:bx,y:by,life:380,maxLife:380,color});
+    shakeScreen(Math.max(5,16-death.burstCount));
+  }
+  if(death.timer<=0&&!death.finishing){
+    const colors=['#ff4d6d','#ffd166','#5dffb0','#4be8ff','#b66cff'];
+    for(let i=0;i<colors.length;i++){
+      spawnParticleBurst(death.x+rand(-110,110),GROUND_Y-rand(20,180),colors[i],28);
+      fx.push({kind:'ring',x:death.x,y:GROUND_Y-4,life:900+i*100,maxLife:900+i*100,color:colors[i],radius:220+i*70});
+    }
+    shakeScreen(34);
+    death.finishing=true; death.timer=650; death.burstTimer=9999;
+  } else if(death.timer<=0&&death.finishing){
+    state.finalBossDeath=null; state.finalBossDefeated=true; finalVictory();
   }
 }
 
@@ -1868,7 +1971,11 @@ function chooseRewardCards(available,rank){
 
 function updateObjectives(dt){
   const o=state.objective;
-  if(o.type==='defend'){
+  if(o.type==='finalDefense'){
+    o.timer=Math.max(0,o.timer-dt);
+    if(o.orbHp<=0){ announce('THE ORB WAS LOST','#ff2e88'); player.hp=0; }
+    else if(o.timer<=0) absorbFinalOrb();
+  } else if(o.type==='defend'){
     o.timer=Math.max(0,o.timer-dt);
     o.spawnTimer-=dt;
     if(o.spawnTimer<=0&&o.timer>0){
@@ -1882,6 +1989,20 @@ function updateObjectives(dt){
   } else if(o.type==='goal'&&Math.abs(player.x-o.goalX)<65){
     completeObjective();
   }
+}
+
+function absorbFinalOrb(){
+  if(state.finalDuelPhase!==1) return;
+  state.finalDuelPhase=2;
+  state.finalPhaseFlash=1600;
+  player.finalRainbow=true;
+  player.hp=Math.min(player.maxHp,player.hp+35);
+  state.objective={type:'eliminate',label:'FINISH THE PRISMATIC ECHO',timer:0,spawnTimer:0,orbX:0,orbHp:0,goalX:0};
+  announce('THE ORB CHOOSES YOU - FINISH IT!','#ffd166');
+  flashWave('BREAK THE RAINBOW SHIELD');
+  spawnParticleBurst(player.x,GROUND_Y-55-player.z,'#ffffff',48);
+  updateObjectiveHUD();
+  showFinalCountdown('DEFEAT IT','THE ORB IS SAFE AND ITS POWER IS YOURS. BREAK THE SHIELD WITH A RAINBOW ATTACK, THEN FINISH THE BOSS.');
 }
 
 function openReward(){
@@ -1912,7 +2033,7 @@ function openReward(){
         else { state.deck.push(card.id); state.cardLevels[card.id]=1; }
         if(!state.finalBossUnlocked&&LIB_LIST.filter(candidate=>candidate.rainbow).every(candidate=>state.deck.includes(candidate.id))){
           state.finalBossUnlocked=true;
-          announce('THE FINAL DUEL AWAITS ON WAVE 50','#ffd166');
+          announce('A POWERFUL PRESENCE STIRS ABOVE','#ffd166');
         }
         buildQueues(); closeReward();
       });
@@ -2070,8 +2191,10 @@ function render(){
   ctx.translate(-state.camX+shakeX, shakeY);
 
   drawBackground();
+  drawFinalArenaBackground();
   drawGround();
   drawObjectiveMarker();
+  drawHealthOrbs();
 
   const drawables = [...state.enemies.filter(e=>e.alive||e.spawnAnim>0), {isPlayer:true}];
   drawables.sort((a,b)=> (a.isPlayer?player.x:a.x) - (b.isPlayer?player.x:b.x));
@@ -2192,7 +2315,7 @@ function drawPlayer(){
   const flash = p.hitFlash>0;
   const invuln = p.invuln>0;
   const airborne = p.z>2;
-  const rainbowRank = state.combo.rank==='S' || state.combo.rank==='SS' || state.combo.rank==='SSS';
+  const rainbowRank = player.finalRainbow || state.combo.rank==='S' || state.combo.rank==='SS' || state.combo.rank==='SSS';
   const rainbowHue = (state.time*.22)%360;
   const rainbowColor = `hsl(${rainbowHue},100%,65%)`;
   const rainbowColor2 = `hsl(${(rainbowHue+120)%360},100%,65%)`;
@@ -2471,6 +2594,62 @@ function enemyHeight(en){
   return hover + launched + leap;
 }
 
+function drawFinalArenaBackground(){
+  if(!state.finalBossActive&&!state.finalBossDeath) return;
+  const left=state.camX-40;
+  const phase2=state.finalDuelPhase===2;
+  ctx.save();
+  if(!phase2){
+    const voidGrad=ctx.createRadialGradient(state.objective.orbX,GROUND_Y-50,30,state.objective.orbX,GROUND_Y-50,620);
+    voidGrad.addColorStop(0,'rgba(75,232,255,.14)'); voidGrad.addColorStop(.35,'rgba(91,38,120,.12)'); voidGrad.addColorStop(1,'rgba(2,1,8,.82)');
+    ctx.fillStyle=voidGrad; ctx.fillRect(left,0,W+80,GROUND_Y+120);
+    for(let i=0;i<9;i++){
+      const sourceX=left+(i+.5)*(W/9)+Math.sin(state.time*.0015+i)*34;
+      const hue=(i*42+state.time*.025)%360;
+      ctx.strokeStyle=`hsla(${hue},100%,65%,.14)`; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(sourceX,35); ctx.lineTo(state.objective.orbX,GROUND_Y-44); ctx.stroke();
+    }
+    ctx.fillStyle='rgba(0,0,0,.2)';
+    for(let x=left;x<left+W+80;x+=95){ const h=35+25*Math.sin(state.time*.004+x*.02); ctx.fillRect(x,GROUND_Y-h,3,h); }
+  } else {
+    const spectrum=ctx.createLinearGradient(left,0,left+W,0);
+    spectrum.addColorStop(0,'rgba(255,77,109,.10)'); spectrum.addColorStop(.22,'rgba(255,209,102,.10)');
+    spectrum.addColorStop(.45,'rgba(93,255,176,.11)'); spectrum.addColorStop(.68,'rgba(75,232,255,.11)'); spectrum.addColorStop(1,'rgba(182,108,255,.12)');
+    ctx.fillStyle=spectrum; ctx.fillRect(left,0,W+80,GROUND_Y+120);
+    for(let band=0;band<6;band++){
+      ctx.strokeStyle=`hsla(${(state.time*.035+band*60)%360},100%,68%,${.18+band*.025})`;
+      ctx.lineWidth=8-band; ctx.beginPath();
+      for(let x=left-20;x<=left+W+40;x+=35){
+        const y=105+band*34+Math.sin(x*.006+state.time*.0025+band)*30;
+        if(x===left-20) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+    ctx.globalAlpha=.22;
+    for(let i=0;i<14;i++){
+      const x=left+((i*173+state.time*.12)%(W+180))-90;
+      ctx.strokeStyle=`hsl(${(i*37+state.time*.04)%360},100%,65%)`; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(x,GROUND_Y); ctx.lineTo(x+Math.sin(i)*180,GROUND_Y-210); ctx.stroke();
+    }
+  }
+  if(state.finalPhaseFlash>0){
+    const alpha=clamp(state.finalPhaseFlash/1600,0,1);
+    ctx.globalAlpha=alpha*.55; ctx.fillStyle=`hsl(${state.time*.2%360},100%,85%)`; ctx.fillRect(left,0,W+80,H);
+  }
+  ctx.restore();
+}
+
+function drawHealthOrbs(){
+  for(const orb of state.healthOrbs){
+    const pulse=.5+.5*Math.sin(state.time*.015+orb.x);
+    ctx.save(); ctx.translate(orb.x,orb.y);
+    ctx.shadowColor='#5dffb0'; ctx.shadowBlur=18+pulse*10;
+    ctx.fillStyle='#5dffb0'; ctx.beginPath(); ctx.arc(0,0,13+pulse*2,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#ffffff'; ctx.fillRect(-3,-8,6,16); ctx.fillRect(-8,-3,16,6);
+    ctx.restore();
+  }
+}
+
 function drawContextHint(){
   if(state.rankHintTimer<=0&&state.dodgeHintTimer<=0) return;
   const bob=Math.sin(state.time*.012)*4;
@@ -2490,11 +2669,11 @@ function drawContextHint(){
 
 function drawObjectiveMarker(){
   const o=state.objective;
-  if(o.type==='defend'){
+  if(o.type==='defend'||o.type==='finalDefense'){
     const pulse=0.5+0.5*Math.sin(state.time*0.008);
     ctx.save(); ctx.translate(o.orbX,GROUND_Y-44);
     ctx.shadowColor='#4be8ff'; ctx.shadowBlur=18+pulse*16;
-    ctx.fillStyle=o.orbHp>30?'#4be8ff':'#ff2e88';
+    ctx.fillStyle=o.type==='finalDefense'?`hsl(${state.time*.18%360},100%,65%)`:o.orbHp>30?'#4be8ff':'#ff2e88';
     ctx.beginPath(); ctx.arc(0,0,22+pulse*3,0,Math.PI*2); ctx.fill();
     ctx.strokeStyle='#eae6f5'; ctx.lineWidth=3;
     ctx.beginPath(); ctx.arc(0,0,31,0,Math.PI*2); ctx.stroke();
@@ -2548,8 +2727,20 @@ function drawEnemy(en){
   ctx.fillStyle = flash? '#ffffff' : frozen ? '#70dcff' : en.color;
 
   if(en.kind==='rainbowNemesis'){
+    const action=en.nemesisAction;
+    const striking=en.attackState==='nemesisWindup'||en.attackState==='nemesisDash'||en.attackState==='nemesisFault';
+    const motion=action==='repulsionDash'?.22:action==='titanUppercut'?-.16:action==='flurry'?Math.sin(state.time*.045)*.09:0;
+    ctx.rotate(striking?motion:0);
     const hue=(state.time*.18)%360;
     const c1=`hsl(${hue},100%,65%)`,c2=`hsl(${(hue+120)%360},100%,65%)`,c3=`hsl(${(hue+240)%360},100%,65%)`;
+    if(en.attackState==='nemesisDash'){
+      for(let ghost=1;ghost<=3;ghost++){
+        ctx.save(); ctx.globalAlpha=.2/ghost; ctx.translate(-en.dashDir*ghost*28,0);
+        ctx.fillStyle=`hsl(${(hue+ghost*55)%360},100%,65%)`;
+        ctx.beginPath(); ctx.moveTo(0,-88); ctx.lineTo(22,-27); ctx.lineTo(-22,-27); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.arc(0,-104,16,0,Math.PI*2); ctx.fill(); ctx.restore();
+      }
+    }
     ctx.shadowColor=c1; ctx.shadowBlur=22;
     ctx.fillStyle=flash?'#ffffff':c1;
     ctx.fillRect(-13,-29,10,29); ctx.fillRect(5,-29,10,29);
@@ -2558,11 +2749,20 @@ function drawEnemy(en){
     ctx.fillStyle=flash?'#ffffff':c3;
     ctx.beginPath(); ctx.arc(0,-104,16,0,Math.PI*2); ctx.fill();
     ctx.save(); ctx.translate(9,-72);
-    const action=en.nemesisAction;
     const armAngle=action==='titanUppercut'?-1.15:action==='spectrumBeam'?0:action==='prismaticFault'?.65:action==='repulsionDash'?-.35:.12;
     ctx.rotate(armAngle); ctx.fillStyle=c1; ctx.fillRect(0,-4,action==='spectrumBeam'?50:34,8); ctx.restore();
     ctx.globalAlpha=.7; ctx.strokeStyle=c3; ctx.lineWidth=3;
     ctx.beginPath(); ctx.arc(0,-54,34+Math.sin(state.time*.015)*5,0,Math.PI*2); ctx.stroke(); ctx.globalAlpha=1;
+    if(state.finalDuelPhase===1||en.shieldHp>0){
+      const shieldPct=state.finalDuelPhase===1?1:clamp(en.shieldHp/en.shieldMax,0,1);
+      ctx.globalAlpha=.28+.22*Math.sin(state.time*.018);
+      ctx.fillStyle=c1; ctx.beginPath(); ctx.arc(0,-58,58,0,Math.PI*2); ctx.fill();
+      ctx.globalAlpha=1; ctx.strokeStyle='#ffffff'; ctx.lineWidth=4;
+      ctx.beginPath(); ctx.arc(0,-58,58,-Math.PI/2,-Math.PI/2+Math.PI*2*shieldPct); ctx.stroke();
+    } else if(state.finalDuelPhase===2&&en.shieldRegenTimer>0){
+      ctx.save(); ctx.scale(en.facing,1); ctx.fillStyle='#ffd166'; ctx.font='900 10px Orbitron'; ctx.textAlign='center';
+      ctx.fillText('SHIELD '+Math.ceil(en.shieldRegenTimer/1000)+'s',0,-137); ctx.restore();
+    }
   } else if(en.kind==='brute'){
     roundRect(-24,-70,48,64,10); ctx.fill();
     ctx.beginPath(); ctx.arc(0,-84,17,0,Math.PI*2); ctx.fill();
@@ -2853,6 +3053,7 @@ function drawFx(){
 /* ============================== GAME OVER / START ============================== */
 function gameOver(){
   state.running=false;
+  const continueBtn=document.getElementById('continueRunBtn'); if(continueBtn) continueBtn.classList.add('hidden');
   document.querySelector('#overOverlay .titlemain').textContent='YOU ARE BROKEN';
   document.getElementById('restartBtn').textContent='REBUILD THE DECK';
   document.getElementById('deathHint').textContent = 'TIP: ' + DEATH_HINTS[deathHintIndex];
@@ -2870,17 +3071,27 @@ function finalVictory(){
   waveTransitioning=true;
   state.running=false;
   document.querySelector('#overOverlay .titlemain').textContent='CHAINBREAKER ASCENDANT';
-  document.getElementById('deathHint').textContent='THE PRISMATIC ECHO HAS BEEN SHATTERED. WAVE 50 COMPLETE - THE RUN IS WON.';
+  document.getElementById('deathHint').textContent='THE PRISMATIC ECHO HAS BEEN SHATTERED. WAVE 30 COMPLETE - THE RUN IS WON.';
   document.getElementById('restartBtn').textContent='BEGIN A NEW RUN';
   document.getElementById('statLine').innerHTML=`
-    <div>FINAL WAVE<br><b>50</b></div>
+    <div>FINAL WAVE<br><b>30</b></div>
     <div>ENEMIES DEFEATED<br><b>${state.killsThisRun}</b></div>
     <div>FINAL SCORE<br><b>${state.score}</b></div>
   `;
+  document.getElementById('continueRunBtn').classList.remove('hidden');
   document.getElementById('overOverlay').classList.remove('hidden');
 }
 
+function continueBeyondFinal(){
+  document.getElementById('overOverlay').classList.add('hidden');
+  document.getElementById('continueRunBtn').classList.add('hidden');
+  state.running=true; state.paused=false; waveTransitioning=false;
+  state.finalDuelPhase=0; state.finalBossActive=false;
+  startWave(31);
+}
+
 function resetRun(){
+  const continueBtn=document.getElementById('continueRunBtn'); if(continueBtn) continueBtn.classList.add('hidden');
   document.querySelector('#overOverlay .titlemain').textContent='YOU ARE BROKEN';
   document.getElementById('restartBtn').textContent='REBUILD THE DECK';
   STARTER_DECK=makeRandomStarterDeck();
@@ -2897,6 +3108,10 @@ function resetRun(){
   state.lastBoss=null;
   state.waveEndRank=null;
   state.finalBossUnlocked=false; state.finalBossPending=false; state.finalBossActive=false; state.finalBossDefeated=false;
+  state.finalDuelPhase=0;
+  state.finalPhaseFlash=0;
+  state.finalBossDeath=null;
+  state.healthOrbs=[]; state.healthOrbTimer=9000;
   state.tutorialIndex=0; state.tutorialTimer=0;
   state.tutorialOverride=''; state.tutorialOverrideTimer=0;
   state.deckTutorialPause=false;
@@ -2914,6 +3129,7 @@ function resetRun(){
   player.hp=player.maxHp; player.x=300; player.z=0; player.vz=0; player.invuln=1000; player.dodgeInvuln=0; player.knockbackVel=0;
   player.winding=null; player.windupTimer=0;
   player.parryTimer=0;
+  player.finalRainbow=false;
   buildQueues();
   updateComboUI();
   syncHUD();
@@ -2967,12 +3183,32 @@ const countdownContinue=document.createElement('button'); countdownContinue.clas
 countdownContinue.addEventListener('click',closeFinalCountdown);
 countdownPrompt.appendChild(countdownTitle); countdownPrompt.appendChild(countdownSubtitle); countdownPrompt.appendChild(countdownContinue);
 document.getElementById('app').appendChild(countdownPrompt);
+const continueRunBtn=document.createElement('button');
+continueRunBtn.id='continueRunBtn'; continueRunBtn.className='bigbtn hidden'; continueRunBtn.textContent='CONTINUE BEYOND WAVE 30';
+continueRunBtn.addEventListener('click',continueBeyondFinal);
+document.getElementById('overOverlay').insertBefore(continueRunBtn,document.getElementById('restartBtn'));
 
 const comboGuide=document.createElement('div');
 comboGuide.className='titlesub';
 comboGuide.style.cssText='font-size:11px;line-height:1.8;max-width:820px';
 comboGuide.innerHTML='COMBO RECIPES — SKYBREAKER: Uppercut → Juggle Kick → Heavy Slam<br>REVERSAL: Perfect Dodge → Heavy &nbsp;•&nbsp; SHATTER: Freeze → Heavy';
 document.getElementById('startOverlay').appendChild(comboGuide);
+const finalBossDebugBtn=document.createElement('button');
+finalBossDebugBtn.className='ghostbtn'; finalBossDebugBtn.textContent='DEBUG: FINAL BOSS + LEGENDARY';
+finalBossDebugBtn.style.cssText='margin-top:8px;border-color:#b66cff;color:#ffd166';
+finalBossDebugBtn.addEventListener('click',()=>{
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  resetRun();
+  if(!state.deck.includes('spectrumBeam')) state.deck.push('spectrumBeam');
+  state.cardLevels.spectrumBeam=2;
+  state.finalBossUnlocked=true;
+  player.hp=player.maxHp;
+  buildQueues(); syncHUD();
+  state.running=true; state.paused=false; waveTransitioning=false;
+  startWave(30);
+});
+document.getElementById('startOverlay').appendChild(finalBossDebugBtn);
 
 buildQueues();
 syncHUD();

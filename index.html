@@ -61,6 +61,13 @@
   #deckbtn{font-family:'Chakra Petch';font-weight:600;font-size:12px;color:var(--ink-dim);background:transparent;
     border:1px solid var(--panel-line);padding:7px 12px;cursor:pointer;letter-spacing:1px;}
   #deckbtn:hover{color:var(--ink);border-color:var(--ink-dim);}
+  #deckbtn.tutorial-pulse{color:#0a0710;background:var(--cyan);border-color:#fff;animation:deckTutorialPulse .7s ease-in-out infinite alternate;}
+  @keyframes deckTutorialPulse{from{box-shadow:0 0 8px var(--cyan);transform:scale(1)}to{box-shadow:0 0 30px #fff,0 0 48px var(--cyan);transform:scale(1.12)}}
+  #tutorialHint{position:absolute;top:72px;left:22px;width:min(330px,42vw);padding:10px 13px;
+    border-left:3px solid var(--cyan);background:rgba(10,7,16,.82);color:var(--ink);font-size:12px;
+    line-height:1.35;letter-spacing:.4px;box-shadow:0 0 18px rgba(75,232,255,.12);pointer-events:none;}
+  #tutorialHint.hidden{display:none;}
+  #tutorialHint b{display:block;color:var(--cyan);font-family:'Orbitron';font-size:10px;letter-spacing:2px;margin-bottom:4px;}
 
   /* ---------- combo readout ---------- */
   #combowrap{position:absolute;top:70px;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none;}
@@ -103,6 +110,8 @@
   .card.primary.heavy{box-shadow:0 0 22px rgba(255,93,93,0.55);}
   .card.primary.dodge{box-shadow:0 0 22px rgba(93,255,176,0.55);}
   .card.primary.special{box-shadow:0 0 22px rgba(255,209,102,0.55);}
+  .card.rainbow,.dcard.rainbow,.rcard.rainbow{border:2px solid transparent !important;background:linear-gradient(var(--panel),var(--panel)) padding-box,linear-gradient(120deg,#ff4d6d,#ffd166,#5dffb0,#4be8ff,#b66cff,#ff4d6d) border-box;background-size:100% 100%,300% 300%;animation:rainbowShift 2.2s linear infinite;box-shadow:0 0 18px rgba(75,232,255,.35);}
+  @keyframes rainbowShift{0%{background-position:0 0,0% 50%}100%{background-position:0 0,300% 50%}}
   .keycap.light{color:var(--light);}
   .keycap.heavy{color:var(--heavy);}
   .keycap.dodge{color:var(--dodge);}
@@ -151,6 +160,16 @@
   #deckPanel{width:100%;max-width:920px;margin:40px auto;background:var(--panel);border:1px solid var(--panel-line);
     padding:26px;max-height:82vh;overflow:auto;}
   #deckGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;margin-top:16px;}
+  #deckGrid{display:block;}
+  .deck-section{margin-top:22px;}
+  .deck-section:first-child{margin-top:16px;}
+  .deck-section-title{font-family:'Orbitron';font-size:13px;font-weight:800;letter-spacing:3px;text-transform:uppercase;margin-bottom:10px;}
+  .deck-section-title.light{color:var(--light);}.deck-section-title.heavy{color:var(--heavy);}
+  .deck-section-title.dodge{color:var(--dodge);}.deck-section-title.special{color:var(--special);}
+  .deck-section-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;}
+  .trash-card{margin-top:8px;padding:5px 9px;font-family:'Chakra Petch';font-size:10px;font-weight:700;letter-spacing:1px;color:#ff8a8a;background:rgba(255,93,93,.08);border:1px solid #7d303d;cursor:pointer;}
+  .trash-card:hover:not(:disabled){color:#fff;background:rgba(255,93,93,.28);border-color:var(--heavy);}
+  .trash-card:disabled{color:var(--ink-dim);border-color:var(--panel-line);background:transparent;cursor:not-allowed;opacity:.55;}
   .dcard{background:var(--void2);border:2px solid var(--panel-line);border-radius:8px;padding:10px 6px;text-align:center;}
   .dcard .rc-icon{font-size:26px;}
   .dcard .rc-name{font-family:'Orbitron';font-size:10px;font-weight:700;margin-top:4px;}
@@ -167,6 +186,10 @@
   #statLine div{font-family:'Orbitron';font-size:13px;color:var(--ink-dim);}
   #statLine b{color:var(--gold);}
   #deathHint{max-width:520px;color:var(--cyan);font-size:14px;letter-spacing:.5px;line-height:1.45;}
+  #objectivepill{font-family:'Orbitron';font-size:11px;font-weight:800;letter-spacing:1px;color:var(--green);border:1px solid var(--cyan-dim);padding:6px 10px;white-space:nowrap;}
+  #announcer{position:absolute;top:24%;left:50%;transform:translate(-50%,-50%);font-family:'Orbitron';font-size:clamp(24px,5vw,48px);font-weight:900;letter-spacing:5px;pointer-events:none;z-index:45;opacity:0;text-align:center;text-shadow:0 0 28px currentColor;}
+  #announcer.show{animation:announceFlash 1.15s ease-out forwards;}
+  @keyframes announceFlash{0%{opacity:0;transform:translate(-50%,-50%) scale(.65)}15%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}65%{opacity:1}100%{opacity:0;transform:translate(-50%,-60%) scale(1)}}
 </style>
 </head>
 <body>
@@ -288,15 +311,31 @@ const LIB = {
   novaBurst:     {id:'novaBurst', name:'Nova Burst', type:'special', dmg:16, range:230, tag:'aoe', from:[], cd:1150, desc:'Creates a damaging blast around you.', icon:'💥'},
   cryoShot:      {id:'cryoShot', name:'Cryo Shot', type:'special', dmg:2, range:520, tag:'freeze', from:[], cd:1400, desc:'Freezes struck enemies for 5 seconds.', icon:'❄️'},
 };
+Object.assign(LIB.parryStep,{
+  name:'Parry Stance', dmg:35, cd:1100,
+  desc:'Stand still for 1 second. Taking a hit triggers a damaging explosion.',
+  dashSpeed:0, dashDuration:0, invuln:0
+});
+LIB.prismaticFault={id:'prismaticFault',name:'Prismatic Fault',type:'special',dmg:5,range:0,tag:'prismatic',from:[],cd:1250,desc:'Four rapid ground blasts race forward with enormous knockback.',icon:'🌈',rainbow:true};
+LIB.spectrumBeam={id:'spectrumBeam',name:'Spectrum Beam',type:'special',dmg:7,range:760,tag:'beam',from:[],cd:1450,desc:'A huge low-damage laser that launches everything in its path.',icon:'🌈',rainbow:true};
+LIB.flurry={id:'flurry',name:'Flurry',type:'light',dmg:3,range:105,tag:'stun',from:[],cd:760,desc:'Seven lightning-fast jabs followed by a piercing rainbow energy ball. Grants two combo points.',icon:'🌈',rainbow:true,legendary:true};
+LIB.titanUppercut={id:'titanUppercut',name:'Titan Uppercut',type:'heavy',dmg:18,range:125,tag:'launch',from:[],cd:980,desc:'A colossal uppercut that launches regular enemies far and can knock back bosses.',icon:'🌈',rainbow:true,legendary:true};
+LIB.repulsionDash={id:'repulsionDash',name:'Repulsion Dash',type:'dodge',dmg:0,range:0,tag:'dash',from:[],cd:820,desc:'An invulnerable zero-damage dash that violently repels every enemy touched.',icon:'🌈',rainbow:true,legendary:true,dashSpeed:1150,dashDuration:340,invuln:420};
+Object.assign(LIB.flashJab,{dmg:3,desc:'A rapid three-hit string that briefly staggers.'});
+Object.assign(LIB.ironCross,{range:150,desc:'A broad heavy cleave that launches a crowd.'});
+Object.assign(LIB.whirlwind,{dmg:5,desc:'A three-hit spin that shreds nearby groups.'});
+Object.assign(LIB.novaBurst,{desc:'One huge blast that knocks nearby enemies away.'});
 const LIB_LIST = Object.values(LIB);
 // these hit a single chosen target instead of cleaving the whole frontal arc
-const SINGLE_TARGET_CARDS = new Set(['grappleThrow','vampiricStrike']);
+const SINGLE_TARGET_CARDS = new Set(['jab','flurry','grappleThrow','vampiricStrike']);
 const MAX_CLEAVE_TARGETS = 5;
+const MAX_CARD_LEVEL = 5;
 
-const STARTER_DECK = [
-  'jab','jab','cross','risingKnee','uppercut','heavySlam','juggleKick',
-  'rollDodge','rollDodge','flashStep','skywardStep','fireball','whirlwind','meteorRain','novaBurst','cryoShot'
-];
+function makeRandomStarterDeck(){
+  const take=(type,count)=>shuffle(LIB_LIST.filter(card=>card.type===type&&!card.rainbow)).slice(0,count).map(card=>card.id);
+  return [...take('light',2),...take('heavy',2),...take('dodge',1),...take('special',1)];
+}
+let STARTER_DECK=makeRandomStarterDeck();
 
 const TYPES = ['light','heavy','dodge','special'];
 const KEYMAP = {KeyJ:'light', KeyK:'heavy', KeyL:'dodge', KeyU:'special'};
@@ -338,7 +377,10 @@ const DEATH_HINTS = [
   'Cycle between J and K for powerful combos.',
   'Defeat the ranged enemies first.',
   'Every multihit card shuffles your deck.',
-  'Beat the boss every 10 waves.',
+  'A random boss appears every 5 waves.',
+  'Move with A/D, jump with Space, and use J/K/L/U for your four card types.',
+  'Higher end-of-wave ranks improve your chance of finding a rainbow Legendary card.',
+  'A well-timed dodge buffs the damage of your following attacks.',
 ];
 let deathHintIndex = 0;
 
@@ -352,17 +394,31 @@ const state = {
   time:0,
   shake:0,
   deck: STARTER_DECK.slice(),
+  cardLevels:Object.fromEntries(STARTER_DECK.map(id=>[id,1])),
   queues: {light:[],heavy:[],dodge:[],special:[]},
   cooldown: {light:0,heavy:0,dodge:0,special:0},
-  combo: {count:0, timer:0, lastTag:null, window:1600},
+  combo: {count:0, timer:0, lastTag:null, window:1600, history:[], rank:null},
+  reversalReady:0,
   buffHits:0,
   dodgeBuff:1,
   dodgeBuffTimer:0,
   pending:[],           // queued attacks waiting on their windup
+  delayedBlasts:[],
   enemies: [],
   projectiles: [],
   particles: [],
   killsThisRun:0,
+  objective:{type:'eliminate',label:'DEFEAT ALL ENEMIES',timer:0,spawnTimer:0,orbX:0,orbHp:100,goalX:0},
+  hitStop:0, slowMoTimer:0,
+  lastBoss:null,
+  waveEndRank:null,
+  finalBossUnlocked:false, finalBossPending:false, finalBossActive:false, finalBossDefeated:false,
+  tutorialIndex:0, tutorialTimer:0,
+  tutorialOverride:'', tutorialOverrideTimer:0,
+  deckTutorialPause:false,
+  countdownPause:false,
+  dRankTime:0, rankHintTimer:0, rankHintCooldown:0,
+  recentDamage:0, damageWindowTimer:0, dodgeHintTimer:0, dodgeHintCooldown:0,
 };
 
 const player = {
@@ -381,6 +437,9 @@ const player = {
   hitFlash:0,
   knockbackVel:0,
   dashX:0, dashTime:0,
+  dashCardId:null,
+  dashHitEnemies:new Set(),
+  parryTimer:0,
   moving:false,
   walkPhase:0,
 };
@@ -389,9 +448,10 @@ const player = {
 const ATTACK_ANIM_DUR = {light:160, heavy:320, dodge:160, special:260};
 const WAVE_START_INVULN = 2000;
 // extra forward lunges for a few cards, so heavier/committal moves feel like they close distance
-const LUNGE = {cross:60, ironCross:110, vampiricStrike:120, flashJab:34, poisonDart:0};
+const LUNGE = {cross:60, ironCross:110, titanUppercut:125, vampiricStrike:120, flashJab:34, poisonDart:0};
 
 function buildQueues(){
+  state.deck=[...new Set(state.deck)];
   for(const t of TYPES){
     const cards = state.deck.filter(id=>LIB[id].type===t);
     state.queues[t] = shuffle(cards.length?cards:[]);
@@ -405,6 +465,10 @@ window.addEventListener('keydown', e=>{
   if(e.code==='Space') e.preventDefault();
   if(!keys[e.code] && (e.code==='Space'||e.code==='KeyW'||e.code==='ArrowUp')) tryJump();
   keys[e.code]=true;
+  if(player.dashTime<=0){
+    if(e.code==='KeyA'||e.code==='ArrowLeft') player.facing=-1;
+    if(e.code==='KeyD'||e.code==='ArrowRight') player.facing=1;
+  }
   if(KEYMAP[e.code]) tryPlay(KEYMAP[e.code]);
 });
 window.addEventListener('keyup', e=>{ keys[e.code]=false; });
@@ -417,6 +481,7 @@ document.querySelectorAll('.keycap').forEach(btn=>{
 
 function tryJump(){
   if(!state.running || state.paused) return;
+  if(player.parryTimer>0) return;
   if(player.z<=0.5){
     player.vz = JUMP_SPEED;
     spawnParticleBurst(player.x, GROUND_Y, '#8e84a8', 6);
@@ -428,9 +493,16 @@ let enemySeq=0;
 const ENEMY_BASE = {
   grunt:  {hp:22, speed:105, dmg:8,  radius:24, color:'#c94b6a', xp:10, ranged:false, meleeRange:64, telegraph:520, strike:140, recover:260},
   brute:  {hp:58, speed:66,  dmg:15, radius:32, color:'#8a3fae', xp:22, ranged:false, meleeRange:76, telegraph:760, strike:180, recover:420},
+  sentinel:{hp:72, speed:58, dmg:13, radius:30, color:'#7183a8', xp:28, ranged:false, meleeRange:78, telegraph:700, strike:180, recover:460, armored:true},
   spitter:{hp:16, speed:88,  dmg:7,  radius:20, color:'#3f9fae', xp:16, ranged:true,  shootRange:480, telegraph:480, strike:120, recover:500},
   flyer:  {hp:20, speed:130, dmg:9, radius:22, color:'#f2a93b', xp:18, ranged:true, shootRange:360, telegraph:380, strike:120, recover:380, flying:true, hoverHeight:125},
+  hopper: {hp:30, speed:138, dmg:11, radius:24, color:'#77d65c', xp:20, ranged:false, meleeRange:76, telegraph:460, strike:460, recover:220, leaper:true},
+  swordbound:{hp:390, speed:145, dmg:19, radius:40, color:'#d96a3d', xp:145, ranged:false, meleeRange:112, telegraph:680, strike:520, recover:260, boss:true, leaper:true},
   boss:   {hp:420, speed:82, dmg:22, radius:52, color:'#b4497d', xp:120, ranged:true, meleeRange:118, shootRange:560, telegraph:820, strike:300, recover:560, boss:true},
+  bossWalker:{hp:460, speed:118, dmg:28, radius:48, color:'#e13f3f', xp:140, ranged:false, meleeRange:126, telegraph:720, strike:260, recover:420, boss:true},
+  bossGunner:{hp:410, speed:78, dmg:10, radius:46, color:'#35c2d4', xp:150, ranged:true, shootRange:640, telegraph:720, strike:620, recover:600, boss:true, burstBoss:true},
+  bossUfo:{hp:440, speed:155, dmg:12, radius:50, color:'#b66cff', xp:165, ranged:true, shootRange:700, telegraph:580, strike:620, recover:380, boss:true, ufoBoss:true, flying:true, hoverHeight:210},
+  rainbowNemesis:{hp:1250,speed:245,dmg:18,radius:28,color:'#ffffff',xp:1000,ranged:false,meleeRange:120,shootRange:760,telegraph:360,strike:620,recover:180,boss:true,rainbowNemesis:true},
 };
 function spawnEnemy(kind, x){
   enemySeq++;
@@ -443,7 +515,16 @@ function spawnEnemy(kind, x){
     strikeDur:base.strike, recoverDur:base.recover,
     flying:base.flying||false, hoverHeight:base.hoverHeight||0, hoverOffset:rand(0,Math.PI*2),
     boss:base.boss||false, attackMode:'melee', bossLeap:0,
+    miniboss:base.miniboss||false, leaper:base.leaper||false, leapTargetX:x,
+    burstBoss:base.burstBoss||false, ufoBoss:base.ufoBoss||false,
+    rainbowNemesis:base.rainbowNemesis||false, nemesisAction:null, nemesisCombo:0, nemesisLastAction:null,
+    burstShots:0, burstTimer:0, patrolDir:Math.random()<0.5?-1:1,
+    phase2:false, phaseTimer:0, phaseCooldown:0, phaseLeap:false,
+    phaseJumpTimer:0, phaseJumpStart:0, phaseJumpTarget:0,
+    diveTimer:0, diveHeight:null, diveStartX:0, diveTargetX:0, diveHit:false,
+    armored:base.armored||false, armorBroken:false,
     airborne:false, vy:0, airTime:0, stagger:0,
+    knockbackVel:0, rotation:0, spinVel:0, collisionCooldown:0,
     attackState:'chase', stateTimer:0, hasStruck:false,
     dot:null, facing:-1, hitFlash:0, frozen:0, alive:true, spawnAnim:1,
     row: rand(-14,14),
@@ -452,21 +533,39 @@ function spawnEnemy(kind, x){
 
 function waveComposition(wave){
   const list=[];
+  if(state.finalBossPending) return ['rainbowNemesis'];
+  if(state.objective.type==='bossRush'){
+    const bosses=shuffle(['bossWalker','bossGunner','bossUfo','swordbound']).slice(0,2);
+    return bosses;
+  }
   const grunts = 2 + Math.floor(wave*1.4);
   const brutes = Math.floor(wave/2);
   const spitters = Math.floor((wave-1)/2);
   const flyers = wave>=4 ? 1+Math.floor((wave-4)/3) : 0;
-  const bosses = wave%10===0 ? 1 : 0;
+  const sentinels = wave>=2 ? Math.floor(wave/3) : 0;
+  const hoppers = wave>=4 ? 1+Math.floor((wave-4)/4) : 0;
   for(let i=0;i<grunts;i++) list.push('grunt');
   for(let i=0;i<brutes;i++) list.push('brute');
   for(let i=0;i<spitters;i++) list.push('spitter');
   for(let i=0;i<flyers;i++) list.push('flyer');
-  for(let i=0;i<bosses;i++) list.push('boss');
+  for(let i=0;i<sentinels;i++) list.push('sentinel');
+  for(let i=0;i<hoppers;i++) list.push('hopper');
+  if(wave%5===0 && state.objective.type==='eliminate'){
+    const choices=['bossWalker','bossGunner','bossUfo','swordbound'].filter(kind=>kind!==state.lastBoss);
+    const bossKind=pick(choices.length?choices:['bossWalker','bossGunner','bossUfo','swordbound']);
+    state.lastBoss=bossKind;
+    list.push(bossKind);
+  }
   return list;
 }
 
 function startWave(n){
   state.wave = n;
+  state.waveEndRank=null;
+  chooseWaveObjective(n);
+  const finalDuel=n===50;
+  state.finalBossPending=finalDuel;
+  if(finalDuel) state.objective={type:'eliminate',label:'FINAL DUEL',timer:0,spawnTimer:0,orbX:0,orbHp:0,goalX:0};
   // Projectiles pause during the reward screen; remove any leftovers before new enemies spawn.
   state.projectiles = [];
   player.x = WORLD_W / 2;
@@ -474,13 +573,104 @@ function startWave(n){
   player.invuln = Math.max(player.invuln, WAVE_START_INVULN);
   const comp = waveComposition(n);
   const spread = Math.max(600, comp.length*140);
-  comp.forEach((kind,i)=>{
-    const x = player.x + 500 + rand(0,spread) + i*40;
-    spawnEnemy(kind, clamp(x,0,WORLD_W-40));
+  const firstSide = Math.random()<0.5 ? -1 : 1;
+  shuffle(comp).forEach((kind,i)=>{
+    const side = i%2===0 ? firstSide : -firstSide;
+    const sideIndex = Math.floor(i/2);
+    const distance = 340 + rand(0,spread*0.3) + sideIndex*28;
+    const x = player.x + side*distance;
+    spawnEnemy(kind, clamp(x,40,WORLD_W-40));
   });
+  if(finalDuel){
+    state.finalBossPending=false; state.finalBossActive=true;
+    state.enemies=state.enemies.filter(en=>en.rainbowNemesis);
+    flashWave('FINAL DUEL - THE PRISMATIC ECHO');
+    announce('ONLY RAINBOW ATTACKS CAN HURT IT','#ffd166');
+  }
+  if(state.objective.type==='bossRush'){
+    for(const en of state.enemies.filter(en=>en.boss)){
+      en.maxHp=Math.round(en.maxHp*0.58); en.hp=en.maxHp; en.dmg=Math.round(en.dmg*0.72);
+    }
+  }
   flashWave(n%10===0 ? 'WAVE ' + n + ' — BOSS' : 'WAVE ' + n);
   document.getElementById('wavepill').textContent = 'WAVE ' + n;
+  if(n%5===0) flashWave(n%10===0 ? 'WAVE '+n+' — BOSS + THE SWORDBOUND' : 'WAVE '+n+' — THE SWORDBOUND');
+  if(n%5===0){
+    const boss=state.enemies.find(en=>en.boss);
+    const names={bossGunner:'THE BALLISTIC FIEND',bossWalker:'THE CRIMSON WALKER',bossUfo:'THE VOID SAUCER',swordbound:'THE SWORDBOUND'};
+    if(boss) flashWave('WAVE '+n+' — '+(names[boss.kind]||'BOSS'));
+  }
+  if(state.objective.type==='bossRush') flashWave('WAVE '+n+' — TWO BOSSES');
+  else if(n%5!==0||state.objective.type!=='eliminate') flashWave('WAVE '+n+' — '+state.objective.label);
+  if(n===3){
+    state.tutorialOverride='PRESS TAB to manage your deck. You can trash unwanted cards, but must keep one card of each type.';
+    state.tutorialOverrideTimer=8000;
+    beginDeckTutorial();
+  }
+  if(finalDuel){
+    flashWave('FINAL DUEL - THE PRISMATIC ECHO');
+    announce('ONLY RAINBOW ATTACKS CAN HURT IT','#ffd166');
+  }
+  if(!finalDuel&&n<50&&n%10===0) showFinalCountdown((50-n)+' WAVES REMAINING','THE PRISMATIC ECHO WAITS ON WAVE 50.');
+  else if(n===49) showFinalCountdown('IT\u2019S TIME','THIS IS YOUR FINAL PREPARATION WAVE. THE PRISMATIC ECHO IS NEXT.');
 }
+
+function showFinalCountdown(title,subtitle){
+  state.countdownPause=true; state.paused=true;
+  document.getElementById('countdownTitle').textContent=title;
+  document.getElementById('countdownSubtitle').textContent=subtitle;
+  document.getElementById('countdownPrompt').classList.remove('hidden');
+}
+
+function closeFinalCountdown(){
+  state.countdownPause=false; state.paused=false;
+  document.getElementById('countdownPrompt').classList.add('hidden');
+}
+
+function beginDeckTutorial(){
+  state.deckTutorialPause=true;
+  state.paused=true;
+  const button=document.getElementById('deckbtn');
+  button.classList.add('tutorial-pulse');
+  button.textContent='OPEN DECK [TAB]';
+  const prompt=document.getElementById('deckTutorialPrompt');
+  prompt.classList.remove('hidden');
+  const hint=document.getElementById('tutorialHint');
+  if(hint){ hint.classList.remove('hidden'); hint.querySelector('span').textContent=state.tutorialOverride; }
+}
+
+function chooseWaveObjective(n){
+  const special=n>3 && n%5!==0 && Math.random()<0.50;
+  const type=special?pick(['bossRush','defend','goal']):'eliminate';
+  state.objective={type,label:type==='bossRush'?'BOSS RUSH':type==='defend'?'DEFEND THE ORB':type==='goal'?'REACH THE GOAL':'DEFEAT ALL ENEMIES',timer:type==='defend'?25000:0,spawnTimer:4500,orbX:WORLD_W/2,orbHp:100,goalX:Math.random()<0.5?420:WORLD_W-420};
+  updateObjectiveHUD();
+}
+
+function updateObjectiveHUD(){
+  const el=document.getElementById('objectivepill');
+  if(!el) return;
+  const o=state.objective;
+  if(o.type==='defend') el.textContent=o.label+' '+Math.ceil(o.timer/1000)+'s · ORB '+Math.ceil(o.orbHp);
+  else if(o.type==='goal') el.textContent=o.label+' '+Math.round(Math.abs(player.x-o.goalX))+'m';
+  else el.textContent=o.label;
+}
+
+function cardAtLevel(id,level){
+  const base=LIB[id];
+  const lv=clamp(level||1,1,MAX_CARD_LEVEL);
+  const damageScale=id==='fireball' ? 1+(lv-1)*0.08 : 1+(lv-1)*0.22;
+  const prismaticDamage=id==='prismaticFault'||id==='spectrumBeam';
+  const leveledDamage=prismaticDamage&&lv>=2 ? 30+(lv-2)*8 : Math.round(base.dmg*damageScale);
+  return {
+    ...base, level:lv,
+    dmg:leveledDamage,
+    cd:Math.round(base.cd*Math.max(0.78,1-(lv-1)*0.055)),
+    dashSpeed:base.dashSpeed?Math.round(base.dashSpeed*(1+(lv-1)*0.08)):base.dashSpeed,
+    invuln:base.invuln?Math.round(base.invuln*(1+(lv-1)*0.08)):base.invuln
+  };
+}
+
+function leveledCard(id){ return cardAtLevel(id,state.cardLevels[id]||1); }
 
 function flashWave(text){
   const el = document.getElementById('waveflash');
@@ -491,16 +681,23 @@ function flashWave(text){
 /* ============================== CARD PLAY ============================== */
 function tryPlay(type){
   if(!state.running || state.paused) return;
+  if(player.parryTimer>0) return;
   if(state.cooldown[type] > 0) return;
   const q = state.queues[type];
   if(!q.length) return;
   const cardId = q[0];
-  const card = LIB[cardId];
+  const card = leveledCard(cardId);
+  if(card.id==='skywardStep'&&player.z>0.5){
+    spawnPopup(player.x,GROUND_Y-125-player.z,'GROUND ONLY','#5dffb0');
+    return;
+  }
 
-  // face the nearest target immediately so the telegraph/animation reads correctly
-  const target = nearestEnemyDir();
-  if(target && Math.abs(target.x-player.x) > 6){
-    player.facing = target.x > player.x ? 1 : -1;
+  // Attacks face their target, but horizontal dodges preserve the direction
+  // the player chose with movement input.
+  const horizontalDodge = card.type==='dodge' && (card.dashSpeed??0)>0;
+  if(!horizontalDodge){
+    const target = nearestEnemyDir();
+    if(target && Math.abs(target.x-player.x)>6) player.facing=target.x>player.x?1:-1;
   }
 
   const totalDur = ATTACK_ANIM_DUR[type];
@@ -538,13 +735,16 @@ function executeCard(card, type){
   let healAmt = 0;
   let targetX = null;
   let targets = [];
+  let hitCount = 1;
 
-  if(card.tag==='dash'){
+  if(card.type==='dodge' && ((card.dashSpeed??0)>0 || card.launchSpeed)){
     const dir = player.facing;
     player.dashX = dir*(card.dashSpeed ?? 300); player.dashTime = card.dashDuration ?? 150;
+    player.dashCardId=card.id;
     const invulnTime = card.invuln ?? 120;
     player.invuln = Math.max(player.invuln, invulnTime);
     player.dodgeInvuln = Math.max(player.dodgeInvuln, invulnTime);
+    if(card.id==='repulsionDash') player.dashHitEnemies.clear();
     if(card.launchSpeed){
       player.vz = Math.max(player.vz, card.launchSpeed);
       player.z = Math.max(player.z, 1);
@@ -558,13 +758,18 @@ function executeCard(card, type){
     spawnParticleBurst(player.x, GROUND_Y-30, '#5dffb0', 12);
   }
   if(card.id==='parryStep'){
-    for(const en of enemiesInRadius(player.x, 120)){
-      interruptEnemyAttack(en);
-      en.stagger = Math.max(en.stagger, 700);
-      spawnParticleBurst(en.x, GROUND_Y-40, '#5dffb0', 6);
-    }
-    spawnParticleBurst(player.x, GROUND_Y-30, '#5dffb0', 12);
+    player.parryTimer=1000;
+    player.dashX=0; player.dashTime=0;
+    player.knockbackVel=0;
+    spawnPopup(player.x,GROUND_Y-125-player.z,'PARRY READY','#5dffb0',true);
+    spawnParticleBurst(player.x,GROUND_Y-40-player.z,'#5dffb0',14);
   }
+  if(card.id==='prismaticFault'){
+    launchPrismaticFault(card,player.facing);
+    spawnAttackFx(card,type,null);
+    return;
+  }
+  if(card.id==='flurry') spawnFlurryOrb(card,player.facing);
 
   if(card.dmg>0){
     if(card.id==='meteorRain'){
@@ -573,6 +778,9 @@ function executeCard(card, type){
     } else if(card.tag==='aoe'){
       targets = enemiesInRadius(player.x, card.range).slice(0,MAX_CLEAVE_TARGETS);
       spawnAoeRing(player.x, card.type, card.range);
+    } else if(card.id==='spectrumBeam'){
+      targets=enemiesInFrontAll(player.x,player.facing,card.range).slice(0,12);
+      targetX=player.x+player.facing*card.range;
     } else if(card.range>=300){
       spawnProjectile(card, player.facing);
     } else if(SINGLE_TARGET_CARDS.has(card.id)){
@@ -582,10 +790,18 @@ function executeCard(card, type){
       targets = enemiesInFrontAll(player.x, player.facing, card.range).slice(0,MAX_CLEAVE_TARGETS);
       if(targets.length) targetX = targets[0].x;
     }
+    hitCount=card.id==='flurry'?7:card.id==='flashJab'||card.id==='whirlwind' ? 3 : 1;
     for(const en of targets){
-      hitAny = true;
-      const dealt = applyDamageToEnemy(en, card);
-      if(card.tag==='lifesteal') healAmt += dealt*0.5;
+      hitAny=true;
+      for(let hit=0;hit<hitCount && en.alive;hit++){
+        const hitCard=card.id==='flurry'&&hit===hitCount-1?{...card,dmg:card.dmg*3}:card;
+        const dealt=applyDamageToEnemy(en,hitCard);
+        if(card.tag==='lifesteal') healAmt+=dealt*0.5;
+      }
+      if(card.id==='novaBurst' && en.alive){
+        en.x=clamp(en.x+Math.sign(en.x-player.x||1)*110,0,WORLD_W);
+        en.stagger=Math.max(en.stagger,650);
+      }
     }
   }
 
@@ -595,7 +811,7 @@ function executeCard(card, type){
   }
 
   if(hitAny){
-    registerComboHit(card);
+    registerComboHit(card,targets,card.id==='flurry'?2:hitCount);
     shakeScreen((card.type==='heavy'?9:card.type==='special'?5:3) + Math.min(targets.length-1,3));
   }
 
@@ -632,6 +848,7 @@ function enemiesInFront(x,facing,range){
 }
 
 function interruptEnemyAttack(en){
+  if(en.miniboss || (en.boss && en.kind!=='bossWalker')) return;
   if(en.attackState==='windup' || en.attackState==='strike'){
     en.attackState='recover';
     en.stateTimer = 300;
@@ -640,10 +857,33 @@ function interruptEnemyAttack(en){
 }
 
 function applyDamageToEnemy(en, card){
+  if(en.rainbowNemesis&&!card.rainbow){
+    en.hitFlash=55;
+    spawnPopup(en.x,GROUND_Y-125,'IMMUNE - USE RAINBOW!','#ffd166',true);
+    return 0;
+  }
   let mult = 1;
   let comboLabel = null;
+  if(en.armored && !en.armorBroken){
+    if(card.type==='heavy'){
+      en.armorBroken=true; en.stagger=Math.max(en.stagger,650);
+      spawnPopup(en.x,GROUND_Y-125,'ARMOR BROKEN!','#ffd166',true);
+      spawnParticleBurst(en.x,GROUND_Y-55,'#9fb4d8',18); shakeScreen(8);
+    } else {
+      const chip=card.dmg>0?1:0; en.hp-=chip; en.hitFlash=80;
+      spawnPopup(en.x,GROUND_Y-110,'ARMORED — USE HEAVY!','#9fb4d8',true);
+      return chip;
+    }
+  }
+  if(en.frozen>0 && card.type==='heavy'){
+    mult*=2.1; en.frozen=0; comboLabel='SHATTER!'; state.score+=200;
+    spawnParticleBurst(en.x,GROUND_Y-55,'#b9f4ff',24); shakeScreen(12);
+  }
+  if(card.id==='meteorDrop' && en.airborne){
+    mult*=1.65; comboLabel='METEOR SPIKE!';
+  }
   if(card.from && card.from.includes(state.combo.lastTag) && state.combo.count>0){
-    mult = 1.8;
+    mult *= 1.8;
     comboLabel = 'PERFECT LINK!';
   }
   if(state.buffHits>0){ mult *= 1.5; state.buffHits--; }
@@ -651,9 +891,10 @@ function applyDamageToEnemy(en, card){
   const scale = 1 + Math.min(state.combo.count*0.045, 0.7);
   const dmg = Math.round(card.dmg * mult * scale);
   en.hp -= dmg;
+  state.hitStop=Math.max(state.hitStop,card.type==='heavy'?34:card.type==='special'?24:12);
   en.hitFlash = 140;
   interruptEnemyAttack(en);
-  en.stagger = Math.max(en.stagger, card.tag==='stun'?900:180);
+  if(!en.miniboss && (!en.boss || en.kind==='bossWalker')) en.stagger=Math.max(en.stagger,card.tag==='stun'?900:180);
   if(card.tag==='freeze'){
     en.frozen = 5000;
     spawnParticleBurst(en.x, GROUND_Y-45, '#70dcff', 12);
@@ -662,9 +903,9 @@ function applyDamageToEnemy(en, card){
 
   const wasAirborne = en.airborne;
 
-  if(card.tag==='launch'){ en.airborne=true; en.vy=-430; en.airTime=520; }
-  if(card.tag==='juggle' && en.airborne){ en.vy=-260; en.airTime=Math.max(en.airTime,380); }
-  if(card.tag==='slam'){
+  if(!en.miniboss && !en.boss && card.tag==='launch'){ en.airborne=true; en.vy=-430; en.airTime=520; }
+  if(!en.miniboss && !en.boss && card.tag==='juggle' && en.airborne){ en.vy=-260; en.airTime=Math.max(en.airTime,380); }
+  if(!en.miniboss && !en.boss && card.tag==='slam'){
     if(en.airborne){
       // already up in the air -- spike them back down hard
       en.vy=0; en.airborne=false; en.airTime=0; en.stagger=Math.max(en.stagger,500);
@@ -675,7 +916,7 @@ function applyDamageToEnemy(en, card){
       en.airborne=true; en.vy=-380; en.airTime=460;
     }
   }
-  if(card.id==='shockStomp'){ en.airborne=true; en.vy=-320; en.airTime=420; }
+  if(!en.miniboss && !en.boss && card.id==='shockStomp'){ en.airborne=true; en.vy=-320; en.airTime=420; }
   // any other hit that catches an already-airborne foe keeps them hanging a beat longer,
   // so freeform juggling isn't locked to one exact card chain
   if(wasAirborne && en.airborne && card.tag!=='slam' && card.tag!=='launch' && card.tag!=='juggle'){
@@ -686,6 +927,20 @@ function applyDamageToEnemy(en, card){
   if(card.id==='grappleThrow'){
     en.x = player.x + player.facing*70;
     en.stagger = Math.max(en.stagger, 400);
+  }
+  if(!en.boss || card.id==='titanUppercut'){
+    const away=Math.sign(en.x-player.x)||player.facing;
+    const force=card.id==='titanUppercut'?(en.boss?650:1550):card.id==='prismaticFault'?1050:card.id==='spectrumBeam'?1200:card.id==='grappleThrow'?980:card.id==='novaBurst'?880:card.type==='heavy'?780:card.id==='cross'?340:0;
+    if(force){
+      en.knockbackVel+=away*force;
+      const launchAway=!en.boss&&(card.id==='titanUppercut'||card.id==='prismaticFault'||card.id==='spectrumBeam'||card.id==='grappleThrow'||card.id==='novaBurst'||(card.type==='heavy'&&!(card.tag==='slam'&&wasAirborne)));
+      if(launchAway){
+        en.airborne=true; en.vy=Math.min(en.vy,card.id==='titanUppercut'?-620:-340); en.airTime=Math.max(en.airTime,card.id==='titanUppercut'?1000:720);
+        en.spinVel+=away*(card.id==='titanUppercut'?17:card.id==='grappleThrow'?14:card.id==='novaBurst'?11:9);
+      } else if(en.boss && card.id==='titanUppercut'){
+        en.stagger=Math.max(en.stagger,420);
+      }
+    }
   }
 
   const color = card.type==='heavy' ? '#ff5d5d' : card.type==='light' ? '#5ec8f8' : card.type==='dodge' ? '#5dffb0' : '#ffd166';
@@ -699,25 +954,108 @@ function applyDamageToEnemy(en, card){
     state.score += 50 + state.wave*5;
     state.killsThisRun++;
     spawnParticleBurst(en.x, enY+30, en.color, 18);
+    if(en.rainbowNemesis){ state.finalBossActive=false; state.finalBossDefeated=true; state.slowMoTimer=1500; announce('PRISMATIC ECHO SHATTERED!','#ffd166'); }
+    else if(en.boss){ state.slowMoTimer=900; announce('BOSS BREAKER!','#ffd166'); shakeScreen(20); }
   }
   return dmg;
 }
 
 function spawnProjectile(card, dir){
+  const count=card.id==='fireball'?Math.min(card.level,4):1;
+  for(let i=0;i<count;i++){
+    const offset=(i-(count-1)/2)*16;
+    state.projectiles.push({
+      x:player.x+dir*(30+i*10),y:GROUND_Y-70-player.z+offset,vx:dir*(720+i*18),vy:0,card,life:900,friendly:true,r:10,
+      color:card.tag==='burn'?'#ff9d5c':card.tag==='bleed'?'#8aff5c':card.tag==='freeze'?'#70dcff':'#ffd166',
+      hitEnemyIds:new Set(),comboRegistered:false,
+    });
+  }
+}
+
+function spawnFlurryOrb(card,dir){
+  const orbCard={...card,dmg:Math.max(4,Math.round(card.dmg*1.5))};
   state.projectiles.push({
-    x:player.x + dir*30, y:GROUND_Y-70-player.z, vx:dir*720, vy:0, card, life:900, friendly:true, r:10,
-    color: card.tag==='burn' ? '#ff9d5c' : card.tag==='bleed' ? '#8aff5c' : card.tag==='freeze' ? '#70dcff' : '#ffd166',
-    hitEnemyIds: new Set(),
+    x:player.x+dir*42,y:GROUND_Y-70-player.z,vx:dir*920,vy:0,card:orbCard,life:1050,friendly:true,r:16,
+    color:`hsl(${(state.time*.22)%360},100%,65%)`,hitEnemyIds:new Set(),comboRegistered:true
   });
+  spawnParticleBurst(player.x+dir*36,GROUND_Y-70-player.z,'#ffffff',14);
+}
+
+function launchPrismaticFault(card,dir){
+  const group={comboRegistered:false};
+  const colors=['#ff4d6d','#ffd166','#5dffb0','#4be8ff'];
+  for(let i=0;i<4;i++) state.delayedBlasts.push({timer:i*105,x:player.x+dir*(105+i*105),card,dir,color:colors[i],group});
+}
+
+function resolvePrismaticBlast(blast){
+  const targets=state.enemies.filter(en=>en.alive&&Math.abs(en.x-blast.x)<82).slice(0,8);
+  fx.push({kind:'ring',x:blast.x,y:GROUND_Y-4,life:360,maxLife:360,color:blast.color,radius:95});
+  spawnParticleBurst(blast.x,GROUND_Y-18,blast.color,20); shakeScreen(8);
+  for(const en of targets) applyDamageToEnemy(en,blast.card);
+  if(targets.length&&!blast.group.comboRegistered){ registerComboHit(blast.card,targets); blast.group.comboRegistered=true; }
 }
 
 /* ============================== COMBO ============================== */
-function registerComboHit(card){
-  state.combo.count++;
+function registerComboHit(card,targets=[],hitCount=1){
+  const previousCount=state.combo.count;
+  state.combo.count+=hitCount;
   state.combo.timer = state.combo.window;
   state.combo.lastTag = card.tag;
+  state.combo.history.push(card.id);
+  state.combo.history=state.combo.history.slice(-3);
+  const nextRank=comboRank(state.combo.count);
+  if(nextRank!==state.combo.rank){
+    state.combo.rank=nextRank;
+    announce(nextRank+' RANK',nextRank==='SSS'?'#ffd166':nextRank==='SS'?'#ff2e88':'#4be8ff');
+  }
   updateComboUI();
-  if(state.combo.count>0 && state.combo.count % 3 === 0) overdraw();
+  for(let count=previousCount+1;count<=state.combo.count;count++) if(count%3===0) overdraw();
+  const chain=state.combo.history.join('>');
+  if(chain==='uppercut>juggleKick>heavySlam'){
+    namedCombo('SKYBREAKER!','#ff2e88',400);
+    for(const en of state.enemies.filter(en=>en.alive&&Math.abs(en.x-player.x)<240)){
+      dealComboDamage(en,18); en.stagger=Math.max(en.stagger,700);
+      spawnParticleBurst(en.x,GROUND_Y-45,'#ffd166',10);
+    }
+  } else if(card.type==='heavy'&&state.reversalReady>0){
+    state.reversalReady=0; namedCombo('REVERSAL!','#5dffb0',300);
+    player.invuln=Math.max(player.invuln,700);
+    for(const en of targets){ dealComboDamage(en,12); en.stagger=Math.max(en.stagger,900); }
+  }
+}
+
+function comboRank(count){
+  if(count>=36) return 'SSS';
+  if(count>=26) return 'SS';
+  if(count>=18) return 'S';
+  if(count>=12) return 'A';
+  if(count>=8) return 'B';
+  if(count>=4) return 'C';
+  return 'D';
+}
+
+function announce(text,color){
+  const el=document.getElementById('announcer');
+  if(!el) return;
+  el.textContent=text; el.style.color=color||'#ffd166';
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+}
+
+function namedCombo(name,color,points){
+  state.score+=points; spawnPopup(player.x,GROUND_Y-155-player.z,name,color,true);
+  announce(name,color);
+  spawnParticleBurst(player.x,GROUND_Y-55-player.z,color,24); shakeScreen(11);
+}
+
+function dealComboDamage(en,amount){
+  if(!en.alive) return;
+  if(en.rainbowNemesis) return;
+  en.hp-=amount;
+  if(en.hp<=0){
+    en.alive=false; state.score+=50+state.wave*5; state.killsThisRun++;
+    spawnParticleBurst(en.x,GROUND_Y-45,en.color,18);
+    if(en.boss){ state.slowMoTimer=900; announce('BOSS BREAKER!','#ffd166'); shakeScreen(20); }
+  }
 }
 
 function overdraw(){
@@ -737,6 +1075,7 @@ function updateComboUI(){
   const lab = document.getElementById('combolabel');
   if(state.combo.count>0){
     num.textContent = state.combo.count;
+    lab.textContent=(state.combo.rank||'D')+' RANK COMBO';
     num.classList.add('show'); lab.classList.add('show');
   } else {
     num.classList.remove('show'); lab.classList.remove('show');
@@ -819,6 +1158,12 @@ function spawnAttackFx(card, type, targetX){
       fx.push({kind:'ring', x, y:GROUND_Y-4, life:440, maxLife:440, color:'#b884ff', radius:230});
       fx.push({kind:'shock', x, y:y-8, life:360, maxLife:360, color:'#b884ff'});
       break;
+    case 'prismaticFault':
+      fx.push({kind:'shock',x:x+facing*45,y:GROUND_Y-4,life:260,maxLife:260,color:'#b66cff'});
+      break;
+    case 'spectrumBeam':
+      fx.push({kind:'beam',x:x+facing*30,y:y-66,facing,life:330,maxLife:330,length:760});
+      break;
     case 'cryoShot':
       fx.push({kind:'rune', x:x+facing*22, y:y-66, life:360, maxLife:360, color:'#70dcff'});
       break;
@@ -864,9 +1209,11 @@ function shakeScreen(amt){ state.shake = Math.min(state.shake+amt, 22); }
 /* ============================== UPDATE LOOP ============================== */
 let lastT = performance.now();
 function loop(t){
-  const dt = Math.min(48, t-lastT);
+  const realDt = Math.min(48, t-lastT);
   lastT = t;
-  if(state.running && !state.paused) update(dt);
+  if(state.slowMoTimer>0) state.slowMoTimer=Math.max(0,state.slowMoTimer-realDt);
+  if(state.hitStop>0) state.hitStop=Math.max(0,state.hitStop-realDt);
+  else if(state.running && !state.paused) update(realDt*(state.slowMoTimer>0?0.25:1));
   render();
   requestAnimationFrame(loop);
 }
@@ -874,12 +1221,28 @@ function loop(t){
 function update(dt){
   state.time += dt;
 
+  updateTutorialHints(dt);
+  if(state.rankHintCooldown>0) state.rankHintCooldown=Math.max(0,state.rankHintCooldown-dt);
+  if(state.rankHintTimer>0) state.rankHintTimer=Math.max(0,state.rankHintTimer-dt);
+  if(state.dodgeHintCooldown>0) state.dodgeHintCooldown=Math.max(0,state.dodgeHintCooldown-dt);
+  if(state.dodgeHintTimer>0) state.dodgeHintTimer=Math.max(0,state.dodgeHintTimer-dt);
+  if(state.damageWindowTimer>0){
+    state.damageWindowTimer=Math.max(0,state.damageWindowTimer-dt);
+    if(state.damageWindowTimer<=0) state.recentDamage=0;
+  }
+  if(state.combo.rank==='D'&&state.enemies.some(en=>en.alive)) state.dRankTime+=dt;
+  else if(state.combo.rank&&state.combo.rank!=='D') state.dRankTime=0;
+  if(state.dRankTime>=3600&&state.rankHintCooldown<=0){
+    state.rankHintTimer=2600; state.rankHintCooldown=12000; state.dRankTime=0;
+  }
+
   for(const t of TYPES) state.cooldown[t] = Math.max(0, state.cooldown[t]-dt);
 
   if(state.combo.timer>0){
     state.combo.timer -= dt;
-    if(state.combo.timer<=0){ state.combo.count=0; state.combo.lastTag=null; updateComboUI(); }
+    if(state.combo.timer<=0){ state.combo.count=0; state.combo.lastTag=null; state.combo.history=[]; state.combo.rank=null; updateComboUI(); }
   }
+  if(state.reversalReady>0) state.reversalReady=Math.max(0,state.reversalReady-dt);
   if(state.dodgeBuffTimer>0){
     state.dodgeBuffTimer -= dt;
     if(state.dodgeBuffTimer<=0) state.dodgeBuff=1;
@@ -890,17 +1253,23 @@ function update(dt){
   const ready = state.pending.filter(p=>p.timer<=0);
   state.pending = state.pending.filter(p=>p.timer>0);
   for(const p of ready) executeCard(p.card, p.type);
+  for(const blast of state.delayedBlasts) blast.timer-=dt;
+  const readyBlasts=state.delayedBlasts.filter(blast=>blast.timer<=0);
+  state.delayedBlasts=state.delayedBlasts.filter(blast=>blast.timer>0);
+  for(const blast of readyBlasts) resolvePrismaticBlast(blast);
 
   updatePlayer(dt);
   updateEnemies(dt);
   updateProjectiles(dt);
   updateParticles(dt);
   updateFx(dt);
+  updateObjectives(dt);
 
   state.camX = clamp(player.x - W*0.38, 0, Math.max(0, WORLD_W-W));
   if(state.shake>0) state.shake = Math.max(0, state.shake-dt*0.06);
 
   syncHUD();
+  updateObjectiveHUD();
   checkWaveClear();
 
   if(player.hp<=0){ gameOver(); }
@@ -911,11 +1280,28 @@ function updatePlayer(dt){
   if(keys.KeyA||keys.ArrowLeft) mx-=1;
   if(keys.KeyD||keys.ArrowRight) mx+=1;
 
-  if(player.dashTime>0){
+  if(player.parryTimer>0){
+    player.parryTimer=Math.max(0,player.parryTimer-dt);
+    player.moving=false;
+  } else if(player.dashTime>0){
     player.x += player.dashX * (dt/1000);
     player.dashTime -= dt;
     player.moving=true;
+    if(player.dashCardId==='repulsionDash'){
+      for(const en of state.enemies){
+        if(!en.alive||player.dashHitEnemies.has(en)||Math.abs(en.x-player.x)>en.radius+30) continue;
+        player.dashHitEnemies.add(en);
+        const away=Math.sign(en.x-player.x)||player.facing;
+        en.knockbackVel+=away*(en.boss?620:1500);
+        en.stagger=Math.max(en.stagger,en.boss?260:650);
+        if(!en.boss){ en.airborne=true; en.vy=Math.min(en.vy,-360); en.airTime=Math.max(en.airTime,760); en.spinVel+=away*14; }
+        spawnPopup(en.x,GROUND_Y-105,'REPEL!','#5dffb0',true);
+        spawnParticleBurst(en.x,GROUND_Y-45,'#b66cff',18);
+        shakeScreen(7);
+      }
+    }
   } else {
+    player.dashCardId=null;
     player.x += mx*player.speed*(dt/1000);
     player.moving = mx!==0;
   }
@@ -925,7 +1311,7 @@ function updatePlayer(dt){
   } else {
     player.knockbackVel = 0;
   }
-  if(mx!==0) player.facing = mx>0?1:-1;
+  if(mx!==0 && player.dashTime<=0) player.facing = mx>0?1:-1;
   player.x = clamp(player.x, 0, WORLD_W);
 
   // jump physics
@@ -950,6 +1336,29 @@ function updateEnemies(dt){
     en.spawnAnim = Math.max(0, en.spawnAnim - dt*0.004);
     if(en.hitFlash>0) en.hitFlash -= dt;
     if(en.bossLeap>0) en.bossLeap = Math.max(0, en.bossLeap-dt);
+    if(en.collisionCooldown>0) en.collisionCooldown=Math.max(0,en.collisionCooldown-dt);
+    if(en.phaseCooldown>0) en.phaseCooldown=Math.max(0,en.phaseCooldown-dt);
+    if(en.phaseTimer>0) en.phaseTimer=Math.max(0,en.phaseTimer-dt);
+    if(en.boss&&!en.rainbowNemesis&&!en.phase2&&en.hp<=en.maxHp*0.5){
+      en.phase2=true; en.phaseTimer=6500; en.phaseCooldown=500;
+      announce(en.kind==='bossWalker'?'PREDATOR LEAPS!':en.kind==='bossGunner'?'CROSSFIRE PHASE!':en.kind==='swordbound'?'FRENZY LEAPS!':'GROUND SWEEP!','#ff2e88');
+      if(en.kind==='swordbound'){ en.speed*=1.28; en.telegraphDur=Math.round(en.telegraphDur*0.72); en.recoverDur=Math.round(en.recoverDur*0.65); }
+      state.hitStop=Math.max(state.hitStop,100); shakeScreen(14);
+    }
+    if(en.phaseJumpTimer>0){
+      en.phaseJumpTimer=Math.max(0,en.phaseJumpTimer-dt);
+      const p=1-en.phaseJumpTimer/620;
+      en.x=en.phaseJumpStart+(en.phaseJumpTarget-en.phaseJumpStart)*p;
+      en.bossLeap=Math.max(en.bossLeap,en.phaseJumpTimer);
+      if(en.phaseJumpTimer<=0){ en.attackState='chase'; en.stateTimer=0; }
+      continue;
+    }
+    if(Math.abs(en.knockbackVel)>4){
+      en.x+=en.knockbackVel*(dt/1000);
+      en.knockbackVel*=Math.pow(0.01,dt/520);
+      if(en.airborne) en.rotation+=en.spinVel*(dt/1000);
+      en.spinVel*=Math.pow(0.02,dt/650);
+    } else { en.knockbackVel=0; en.spinVel*=0.9; if(!en.airborne) en.rotation*=Math.pow(0.002,dt/180); }
 
     if(en.dot){
       en.dot.tick -= dt;
@@ -973,17 +1382,24 @@ function updateEnemies(dt){
     if(en.airborne){
       en.vy += 900*(dt/1000);
       en.airTime -= dt;
-      if(en.airTime<=0){ en.airborne=false; en.vy=0; }
+      if(en.airTime<=0){ en.airborne=false; en.vy=0; en.rotation=0; en.spinVel=0; }
       continue;
     }
 
     if(!en.alive) continue;
 
-    const dx = player.x-en.x;
+    const targetsOrb=state.objective.type==='defend'&&en.kind==='grunt';
+    const targetX=targetsOrb?state.objective.orbX:player.x;
+    const dx = targetX-en.x;
     const d = Math.abs(dx);
     en.facing = dx>0?1:-1;
 
+    // Hurry distant enemies into view without making their on-screen attacks faster.
+    const normalSpeed=en.speed;
+    const offscreen=en.x<state.camX-60 || en.x>state.camX+W+60;
+    if(offscreen) en.speed*=1.75;
     updateEnemyFsm(en, d, dx, dt);
+    en.speed=normalSpeed;
 
     // spacing so grounded, non-attacking enemies don't fully stack
     if(en.attackState==='chase' && !en.flying){
@@ -997,14 +1413,78 @@ function updateEnemies(dt){
     }
     en.x = clamp(en.x, 0, WORLD_W);
   }
-  state.enemies = state.enemies.filter(en=> en.alive || en.spawnAnim>0 );
+  resolveEnemyCollisions();
+  state.enemies = state.enemies.filter(en=>en.alive);
+}
+
+function updateTutorialHints(dt){
+  const el=document.getElementById('tutorialHint');
+  if(!el) return;
+  if(state.wave>5){ el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  if(state.tutorialOverrideTimer>0){
+    state.tutorialOverrideTimer=Math.max(0,state.tutorialOverrideTimer-dt);
+    el.querySelector('span').textContent=state.tutorialOverride;
+    return;
+  }
+  state.tutorialTimer-=dt;
+  if(state.tutorialTimer<=0){
+    el.querySelector('span').textContent=DEATH_HINTS[state.tutorialIndex%DEATH_HINTS.length];
+    state.tutorialIndex++;
+    state.tutorialTimer=5200;
+  }
+}
+
+function resolveEnemyCollisions(){
+  const alive=state.enemies.filter(en=>en.alive);
+  for(let i=0;i<alive.length;i++){
+    const a=alive[i];
+    if(Math.abs(a.knockbackVel)<190||a.collisionCooldown>0) continue;
+    for(let j=0;j<alive.length;j++){
+      const b=alive[j];
+      if(a===b||b.collisionCooldown>0||Math.abs(a.x-b.x)>a.radius+b.radius) continue;
+      const direction=Math.sign(a.knockbackVel)||1;
+      dealComboDamage(b,8); b.knockbackVel+=direction*280; b.spinVel+=direction*7;
+      a.knockbackVel*=-0.28; a.collisionCooldown=b.collisionCooldown=420;
+      spawnParticleBurst((a.x+b.x)/2,GROUND_Y-45,'#ffd166',14); shakeScreen(7);
+      break;
+    }
+  }
 }
 
 function updateEnemyFsm(en, d, dx, dt){
+  if(en.rainbowNemesis){ updateRainbowNemesis(en,dt); return; }
+  if(en.ufoBoss){ updateUfoBoss(en,dt); return; }
+  if(en.burstBoss&&en.phase2&&en.phaseCooldown<=0&&en.attackState==='chase'){
+    const otherSide=en.x<player.x?1:-1;
+    en.phaseJumpStart=en.x; en.phaseJumpTarget=clamp(player.x+otherSide*330,70,WORLD_W-70);
+    en.phaseJumpTimer=620; en.phaseCooldown=2300;
+    return;
+  }
   const range = en.ranged ? en.shootRange : en.meleeRange;
 
   switch(en.attackState){
     case 'chase': {
+      if(en.kind==='bossWalker'){
+        if(en.phase2&&en.phaseTimer>0&&en.phaseCooldown<=0){
+          en.phaseLeap=true; en.leapTargetX=player.x; en.attackState='windup'; en.stateTimer=430; en.hasStruck=false; en.phaseCooldown=1250;
+          break;
+        }
+        if(d>en.meleeRange*0.82) en.x+=Math.sign(dx)*en.speed*(dt/1000);
+        else { en.attackState='windup'; en.stateTimer=en.telegraphDur; en.hasStruck=false; }
+        break;
+      }
+      if(en.burstBoss){
+        if(d>en.shootRange*0.82) en.x+=Math.sign(dx)*en.speed*(dt/1000);
+        else if(d<en.shootRange*0.48) en.x-=Math.sign(dx)*en.speed*0.65*(dt/1000);
+        else { en.attackMode='projectile'; en.attackState='windup'; en.stateTimer=en.telegraphDur; en.hasStruck=false; }
+        break;
+      }
+      if(en.leaper){
+        if(d>520) en.x+=Math.sign(dx)*en.speed*(dt/1000);
+        else { en.leapTargetX=player.x; en.attackState='windup'; en.stateTimer=en.telegraphDur; en.hasStruck=false; }
+        break;
+      }
       if(en.boss){
         if(d>en.shootRange){
           en.x += Math.sign(dx)*en.speed*(dt/1000);
@@ -1039,22 +1519,49 @@ function updateEnemyFsm(en, d, dx, dt){
       }
       if(en.stateTimer<=0){
         en.attackState='strike'; en.stateTimer=en.strikeDur; en.hasStruck=false;
-        if(en.boss && en.attackMode==='leap') en.bossLeap=en.strikeDur;
+        if(en.burstBoss){ en.burstShots=4; en.burstTimer=0; }
+        if((en.boss&&en.attackMode==='leap')||en.leaper||en.phaseLeap) en.bossLeap=en.strikeDur;
       }
       break;
     }
     case 'strike': {
-      const strikeMoment = !en.boss || en.attackMode==='projectile' || en.stateTimer<=en.strikeDur*0.48;
+      if(en.burstBoss){
+        en.burstTimer-=dt;
+        if(en.burstShots>0 && en.burstTimer<=0){
+          const dir=Math.sign(player.x-en.x)||en.facing;
+          fireEnemyBall(en,dir*590,0,10,10);
+          en.burstShots--; en.burstTimer=120;
+        }
+        en.stateTimer-=dt;
+        if(en.stateTimer<=0){ en.attackState='recover'; en.stateTimer=en.recoverDur; }
+        break;
+      }
+      if(en.leaper||en.phaseLeap){
+        const step=Math.sign(en.leapTargetX-en.x)*en.speed*2.15*(dt/1000);
+        if(Math.abs(en.leapTargetX-en.x)>Math.abs(step)) en.x+=step;
+      }
+      const strikeMoment=(en.leaper||en.phaseLeap)?en.stateTimer<=en.strikeDur*0.34:!en.boss||en.attackMode==='projectile'||en.stateTimer<=en.strikeDur*0.48;
       if(!en.hasStruck && strikeMoment){
         en.hasStruck = true;
         if(en.ranged && (!en.boss || en.attackMode==='projectile')){
           const dir = Math.sign(dx)||en.facing;
           const bossShot = en.boss;
-          state.projectiles.push({x:en.x,y:GROUND_Y-(en.flying ? enemyHeight(en)+55 : 70),vx:dir*(bossShot?520:420),vy:0,life:1400,friendly:false,r:bossShot?16:8,color:en.color,dmg:bossShot?16:en.dmg,sourceX:en.x});
+          if(en.flying){
+            const startY=GROUND_Y-enemyHeight(en)-55;
+            const aimX=player.x-en.x, aimY=(GROUND_Y-70-player.z)-startY;
+            const aimLength=Math.max(1,Math.hypot(aimX,aimY));
+            fireEnemyBall(en,aimX/aimLength*430,aimY/aimLength*430,en.dmg,8);
+          } else {
+            state.projectiles.push({x:en.x,y:GROUND_Y-70,vx:dir*(bossShot?520:420),vy:0,life:1400,friendly:false,r:bossShot?16:8,color:en.color,dmg:bossShot?16:en.dmg,sourceX:en.x});
+          }
         } else {
-          const inRange = Math.abs(player.x-en.x) <= en.meleeRange+(en.boss?46:18);
+          const attacksOrb=state.objective.type==='defend'&&en.kind==='grunt';
+          const meleeTargetX=attacksOrb?state.objective.orbX:player.x;
+          const inRange = Math.abs(meleeTargetX-en.x) <= en.meleeRange+(en.boss?46:18);
           const jumped = player.z > JUMP_DODGE_HEIGHT;
-          if(inRange && !jumped){
+          if(inRange && attacksOrb){
+            damageOrb(en.dmg);
+          } else if(inRange && !jumped){
             if(player.dodgeInvuln>0){
               registerSuccessfulDodge();
               spawnPopup(player.x, GROUND_Y-140-player.z, 'DODGED!', '#4be8ff', true);
@@ -1067,7 +1574,7 @@ function updateEnemyFsm(en, d, dx, dt){
         }
       }
       en.stateTimer -= dt;
-      if(en.stateTimer<=0){ en.attackState='recover'; en.stateTimer=en.recoverDur; }
+      if(en.stateTimer<=0){ en.attackState='recover'; en.stateTimer=en.recoverDur; en.phaseLeap=false; }
       break;
     }
     case 'recover': {
@@ -1078,19 +1585,197 @@ function updateEnemyFsm(en, d, dx, dt){
   }
 }
 
-function damagePlayer(amount, sourceX){
+function nemesisComboHit(en,amount){
+  const previous=en.nemesisCombo;
+  en.nemesisCombo+=amount;
+  const rank=comboRank(en.nemesisCombo);
+  spawnPopup(en.x,GROUND_Y-145-enemyHeight(en),'RIVAL '+rank+' - '+en.nemesisCombo+' HIT','#ffd166',true);
+  if((previous<18&&en.nemesisCombo>=18)||(previous<26&&en.nemesisCombo>=26)||(previous<36&&en.nemesisCombo>=36)) announce('RIVAL '+rank+' RANK','#ff2e88');
+}
+
+function updateRainbowNemesis(en,dt){
+  const dx=player.x-en.x, d=Math.abs(dx);
+  en.facing=dx>=0?1:-1;
+  const frenzy=en.hp<=en.maxHp*.5;
+  if(frenzy&&!en.phase2){ en.phase2=true; announce('PRISMATIC OVERDRIVE!','#ff2e88'); shakeScreen(14); }
+
+  if(en.attackState==='chase'){
+    en.stateTimer-=dt;
+    const preferred=d>250?1:d<130?-1:0;
+    en.x+=Math.sign(dx)*preferred*en.speed*(frenzy?1.3:1)*(dt/1000);
+    if(en.stateTimer<=0){
+      const actions=['flurry','titanUppercut','repulsionDash','prismaticFault','spectrumBeam'].filter(action=>action!==en.nemesisLastAction);
+      en.nemesisAction=pick(actions); en.nemesisLastAction=en.nemesisAction;
+      en.attackState='nemesisWindup'; en.stateTimer=frenzy?230:360; en.bossLeap=620; en.hasStruck=false;
+      spawnPopup(en.x,GROUND_Y-145,en.nemesisAction.replace(/([A-Z])/g,' $1').toUpperCase(),'#4be8ff',true);
+    }
+    return;
+  }
+
+  if(en.attackState==='nemesisWindup'){
+    en.stateTimer-=dt;
+    en.x+=Math.sign(dx)*en.speed*.35*(dt/1000);
+    if(en.stateTimer>0) return;
+    const action=en.nemesisAction;
+    if(action==='repulsionDash'){
+      en.attackState='nemesisDash'; en.stateTimer=520; en.dashDir=en.facing; en.hasStruck=false;
+    } else if(action==='prismaticFault'){
+      en.attackState='nemesisFault'; en.stateTimer=0; en.faultIndex=0;
+    } else {
+      if(action==='flurry'){
+        if(d<135&&player.invuln<=0) damagePlayer(14,en.x,1150);
+        const aimX=player.x-en.x, aimY=(GROUND_Y-70-player.z)-(GROUND_Y-82-enemyHeight(en));
+        const len=Math.max(1,Math.hypot(aimX,aimY));
+        state.projectiles.push({x:en.x,y:GROUND_Y-82-enemyHeight(en),vx:aimX/len*720,vy:aimY/len*720,life:1500,friendly:false,r:16,color:`hsl(${state.time*.22%360},100%,65%)`,dmg:12,sourceX:en.x,knockbackForce:1150});
+        nemesisComboHit(en,7);
+      } else if(action==='titanUppercut'){
+        en.x=clamp(en.x+en.facing*Math.min(180,d),40,WORLD_W-40);
+        fx.push({kind:'slash',x:en.x,y:GROUND_Y-95,facing:en.facing,life:320,maxLife:320,color:'#ff5d5d',big:true});
+        if(Math.abs(player.x-en.x)<145&&player.z<100) damagePlayer(24,en.x,1450);
+        nemesisComboHit(en,2);
+      } else if(action==='spectrumBeam'){
+        fx.push({kind:'beam',x:en.x+en.facing*30,y:GROUND_Y-90-enemyHeight(en),facing:en.facing,life:380,maxLife:380,length:760});
+        const inFront=en.facing>0?player.x>en.x:player.x<en.x;
+        if(inFront&&Math.abs(player.x-en.x)<790&&player.z<115) damagePlayer(22,en.x,1250);
+        nemesisComboHit(en,2);
+      }
+      en.attackState='recover'; en.stateTimer=frenzy?260:420;
+    }
+    return;
+  }
+
+  if(en.attackState==='nemesisDash'){
+    en.x=clamp(en.x+en.dashDir*(frenzy?1200:980)*(dt/1000),40,WORLD_W-40);
+    en.stateTimer-=dt;
+    fx.push({kind:'trail',x:en.x,y:GROUND_Y-60-enemyHeight(en),facing:-en.dashDir,life:120,maxLife:120,color:`hsl(${state.time*.22%360},100%,65%)`});
+    if(!en.hasStruck&&Math.abs(player.x-en.x)<60){ en.hasStruck=true; damagePlayer(12,en.x,1350); nemesisComboHit(en,2); }
+    if(en.stateTimer<=0){ en.attackState='recover'; en.stateTimer=240; }
+    return;
+  }
+
+  if(en.attackState==='nemesisFault'){
+    en.stateTimer-=dt;
+    if(en.stateTimer<=0&&en.faultIndex<4){
+      const blastX=en.x+en.facing*(105+en.faultIndex*105);
+      const color=`hsl(${(state.time*.22+en.faultIndex*80)%360},100%,65%)`;
+      fx.push({kind:'ring',x:blastX,y:GROUND_Y-4,life:330,maxLife:330,color,radius:92});
+      if(Math.abs(player.x-blastX)<82&&player.z<45) damagePlayer(10,en.x,1100);
+      en.faultIndex++; en.stateTimer=105; nemesisComboHit(en,1);
+    }
+    if(en.faultIndex>=4&&en.stateTimer<=0){ en.attackState='recover'; en.stateTimer=300; }
+    return;
+  }
+
+  en.stateTimer-=dt;
+  if(en.stateTimer<=0){ en.attackState='chase'; en.stateTimer=frenzy?420:650; en.bossLeap=620; }
+}
+
+function fireEnemyBall(en,vx,vy,damage,radius){
+  state.projectiles.push({
+    x:en.x,y:GROUND_Y-enemyHeight(en)-70,vx,vy,life:1900,friendly:false,
+    r:radius,color:en.color,dmg:damage,sourceX:en.x
+  });
+}
+
+function moveUfoBoss(en,dt){
+  const left=clamp(player.x-430,80,WORLD_W-80);
+  const right=clamp(player.x+430,80,WORLD_W-80);
+  if(en.x<=left) en.patrolDir=1;
+  if(en.x>=right) en.patrolDir=-1;
+  en.x+=en.patrolDir*en.speed*(dt/1000);
+  en.facing=en.patrolDir;
+}
+
+function updateUfoBoss(en,dt){
+  if(en.diveTimer>0){
+    en.diveTimer=Math.max(0,en.diveTimer-dt);
+    const p=1-en.diveTimer/1600;
+    en.x=en.diveStartX+(en.diveTargetX-en.diveStartX)*p;
+    en.diveHeight=p<0.22?210-(p/0.22)*185:p>0.78?25+((p-0.78)/0.22)*185:25;
+    if(!en.diveHit&&p>0.2&&p<0.82&&Math.abs(en.x-player.x)<72&&player.z<48){
+      damagePlayer(18,en.x); en.diveHit=true;
+    }
+    if(en.diveTimer<=0){ en.diveHeight=null; en.attackState='chase'; en.stateTimer=700; en.phaseCooldown=3000; }
+    return;
+  }
+  if(en.phase2&&en.phaseCooldown<=0){
+    en.diveStartX=en.x;
+    const side=en.x<player.x?1:-1;
+    en.diveTargetX=clamp(player.x+side*560,80,WORLD_W-80);
+    en.diveTimer=1600; en.diveHit=false; en.attackState='dive';
+    return;
+  }
+  if(en.attackState==='chase'){
+    if(en.stateTimer<=0) en.stateTimer=900;
+    moveUfoBoss(en,dt);
+    en.stateTimer-=dt;
+    if(en.stateTimer<=0){
+      en.attackState='windup'; en.stateTimer=en.telegraphDur;
+    }
+  } else if(en.attackState==='windup'){
+    en.stateTimer-=dt;
+    if(en.stateTimer<=0){
+      const startY=GROUND_Y-enemyHeight(en)-70;
+      const dx=player.x-en.x, dy=(GROUND_Y-70-player.z)-startY;
+      const length=Math.max(1,Math.hypot(dx,dy));
+      fireEnemyBall(en,dx/length*440,dy/length*440,12,12);
+      spawnParticleBurst(en.x,startY,en.color,12);
+      en.attackState='chase'; en.stateTimer=900;
+    }
+  } else {
+    en.attackState='chase'; en.stateTimer=900;
+  }
+}
+
+function damagePlayer(amount, sourceX, knockbackForce=520){
+  if(player.parryTimer>0){
+    triggerParryExplosion();
+    return;
+  }
   if(player.invuln>0) return;
   player.hp = clamp(player.hp-amount,0,player.maxHp);
+  if(state.damageWindowTimer<=0) state.recentDamage=0;
+  state.recentDamage+=amount; state.damageWindowTimer=5000;
+  if(state.recentDamage>=25&&state.dodgeHintCooldown<=0){
+    state.dodgeHintTimer=3000; state.dodgeHintCooldown=14000;
+    state.recentDamage=0; state.damageWindowTimer=0;
+  }
+  state.combo.count=0; state.combo.timer=0; state.combo.lastTag=null; state.combo.history=[]; state.combo.rank=null; updateComboUI();
   const awayFromAttacker = sourceX == null ? -player.facing : (player.x >= sourceX ? 1 : -1);
-  player.knockbackVel = awayFromAttacker * 520;
+  player.knockbackVel = awayFromAttacker * knockbackForce;
   player.hitFlash = 260;
   shakeScreen(6);
   spawnPopup(player.x, GROUND_Y-90-player.z, '-'+amount, '#ff2e88');
 }
 
+function damageOrb(amount){
+  if(state.objective.type!=='defend'||state.objective.orbHp<=0) return;
+  state.objective.orbHp=Math.max(0,state.objective.orbHp-amount);
+  spawnPopup(state.objective.orbX,GROUND_Y-105,'-'+amount,'#ff2e88',true);
+  spawnParticleBurst(state.objective.orbX,GROUND_Y-45,'#4be8ff',12);
+  shakeScreen(5);
+}
+
+function triggerParryExplosion(){
+  player.parryTimer=0;
+  player.invuln=Math.max(player.invuln,600);
+  const targets=enemiesInRadius(player.x,240);
+  const parryDamage=leveledCard('parryStep').dmg;
+  for(const en of targets){
+    dealComboDamage(en,parryDamage);
+    en.stagger=Math.max(en.stagger,1000);
+  }
+  state.score+=150;
+  spawnAoeRing(player.x,'dodge',240);
+  spawnPopup(player.x,GROUND_Y-155-player.z,'PARRY EXPLOSION!','#5dffb0',true);
+  spawnParticleBurst(player.x,GROUND_Y-50-player.z,'#5dffb0',36);
+  shakeScreen(16);
+}
+
 function registerSuccessfulDodge(){
   state.dodgeBuff = Math.min(2, state.dodgeBuff*1.2);
   state.dodgeBuffTimer = 5000;
+  state.reversalReady = 2200;
   spawnPopup(player.x, GROUND_Y-116-player.z, 'DODGE BOOST x'+state.dodgeBuff.toFixed(2), '#ffd166', true);
 }
 
@@ -1106,17 +1791,18 @@ function updateProjectiles(dt){
       for(const en of enemiesInRadius(p.x,26)){
         if(p.hitEnemyIds.has(en.id)) continue;
         applyDamageToEnemy(en, p.card);
-        registerComboHit(p.card);
+        if(!p.comboRegistered){ registerComboHit(p.card,[en]); p.comboRegistered=true; }
         p.hitEnemyIds.add(en.id);
       }
     } else {
-      if(Math.abs(p.x-player.x) < 26 + p.r && player.z<JUMP_DODGE_HEIGHT){
+      const playerY=GROUND_Y-70-player.z;
+      if(Math.hypot(p.x-player.x,p.y-playerY)<26+p.r){
         if(player.dodgeInvuln>0){
           registerSuccessfulDodge();
           spawnPopup(player.x, GROUND_Y-140-player.z, 'DODGED!', '#4be8ff', true);
           p.life=0;
         } else if(player.invuln<=0){
-          damagePlayer(p.dmg||6, p.sourceX);
+          damagePlayer(p.dmg||6, p.sourceX, p.knockbackForce||520);
           p.life=0;
         }
       }
@@ -1147,13 +1833,97 @@ function updateFx(dt){
 let waveTransitioning=false;
 function checkWaveClear(){
   if(waveTransitioning) return;
-  if(state.running && state.enemies.length===0){
+  if(state.running && (state.objective.type==='eliminate'||state.objective.type==='bossRush') && state.enemies.length===0){
+    if(state.wave===50&&state.finalBossDefeated){
+      finalVictory();
+      return;
+    }
+    captureWaveRank();
     waveTransitioning = true;
     setTimeout(()=>openReward(), 500);
   }
 }
 
+function completeObjective(){
+  if(waveTransitioning) return;
+  waveTransitioning=true;
+  captureWaveRank();
+  state.enemies=[]; state.projectiles=[];
+  announce('OBJECTIVE COMPLETE','#5dffb0');
+  setTimeout(()=>openReward(),650);
+}
+
+function captureWaveRank(){ state.waveEndRank=state.combo.rank; }
+
+function chooseRewardCards(available,rank){
+  const chances={D:.02,C:.04,B:.07,A:.12,S:.20,SS:.28,SSS:.38};
+  const legendary=available.filter(card=>card.rainbow);
+  const normal=shuffle(available.filter(card=>!card.rainbow));
+  const chosen=[];
+  const chance=chances[rank]||.01;
+  if(legendary.length&&Math.random()<chance) chosen.push(pick(legendary));
+  for(const card of normal) if(chosen.length<3) chosen.push(card);
+  return shuffle(chosen).slice(0,3);
+}
+
+function updateObjectives(dt){
+  const o=state.objective;
+  if(o.type==='defend'){
+    o.timer=Math.max(0,o.timer-dt);
+    o.spawnTimer-=dt;
+    if(o.spawnTimer<=0&&o.timer>0){
+      o.spawnTimer=4800;
+      const side=Math.random()<0.5?-1:1;
+      spawnEnemy(pick(['grunt','grunt','hopper','spitter']),clamp(o.orbX+side*rand(430,650),40,WORLD_W-40));
+      spawnEnemy(pick(['grunt','sentinel']),clamp(o.orbX-side*rand(430,650),40,WORLD_W-40));
+    }
+    if(o.orbHp<=0){ announce('ORB DESTROYED','#ff2e88'); player.hp=0; }
+    else if(o.timer<=0) completeObjective();
+  } else if(o.type==='goal'&&Math.abs(player.x-o.goalX)<65){
+    completeObjective();
+  }
+}
+
 function openReward(){
+  {
+    state.paused=true;
+    const overlay=document.getElementById('rewardOverlay');
+    const row=document.getElementById('rewardRow');
+    const rewardHint=document.getElementById('rewardHint');
+    rewardHint.textContent=state.wave===1?'Choose a NEW ATTACK to expand your deck, or choose an attack you already own to UPGRADE it.':'';
+    rewardHint.style.display=state.wave===1?'block':'none';
+    row.innerHTML='';
+    const available=LIB_LIST.filter(base=>!state.deck.includes(base.id)||(state.cardLevels[base.id]||1)<MAX_CARD_LEVEL);
+    chooseRewardCards(available,state.waveEndRank).forEach(base=>{
+      const owned=state.deck.includes(base.id);
+      const currentLevel=owned?(state.cardLevels[base.id]||1):0;
+      const nextLevel=owned?currentLevel+1:1;
+      const card=cardAtLevel(base.id,nextLevel);
+      const el=document.createElement('div'); el.className='rcard '+card.type+(card.rainbow?' rainbow':'');
+      const icon=document.createElement('div'); icon.className='rc-icon'; icon.textContent=card.icon;
+      const name=document.createElement('div'); name.className='rc-name'; name.textContent=card.name;
+      const type=document.createElement('div'); type.className='rc-type'; type.textContent=owned?'UPGRADE TO LV '+nextLevel:card.rainbow?'LEGENDARY '+card.type.toUpperCase():'NEW '+card.type;
+      const damage=document.createElement('div'); damage.className='rc-dmg'; damage.textContent=card.dmg+' DMG';
+      const desc=document.createElement('div'); desc.className='rc-desc';
+      desc.textContent=card.id==='fireball'?'Fires '+Math.min(nextLevel,4)+' projectile'+(nextLevel>1?'s.':'.'):card.desc;
+      el.appendChild(icon); el.appendChild(name); el.appendChild(type); el.appendChild(damage); el.appendChild(desc);
+      el.addEventListener('click',()=>{
+        if(owned) state.cardLevels[card.id]=nextLevel;
+        else { state.deck.push(card.id); state.cardLevels[card.id]=1; }
+        if(!state.finalBossUnlocked&&LIB_LIST.filter(candidate=>candidate.rainbow).every(candidate=>state.deck.includes(candidate.id))){
+          state.finalBossUnlocked=true;
+          announce('THE FINAL DUEL AWAITS ON WAVE 50','#ffd166');
+        }
+        buildQueues(); closeReward();
+      });
+      row.appendChild(el);
+    });
+    const healBtn=document.getElementById('healReward');
+    healBtn.style.display=player.hp>=player.maxHp?'none':'inline-block';
+    overlay.classList.remove('hidden');
+    return;
+  }
+  /* Obsolete duplicate-card reward renderer retained for reference.
   state.paused = true;
   const overlay = document.getElementById('rewardOverlay');
   const row = document.getElementById('rewardRow');
@@ -1179,6 +1949,7 @@ function openReward(){
   const healBtn = document.getElementById('healReward');
   healBtn.style.display = player.hp>=player.maxHp ? 'none' : 'inline-block';
   overlay.classList.remove('hidden');
+  */
 }
 function closeReward(){
   document.getElementById('rewardOverlay').classList.add('hidden');
@@ -1196,6 +1967,13 @@ document.getElementById('healReward').addEventListener('click', ()=>{
 function toggleDeck(){
   const el = document.getElementById('deckOverlay');
   if(el.classList.contains('hidden')){
+    if(state.deckTutorialPause){
+      state.deckTutorialPause=false;
+      state.tutorialOverrideTimer=0;
+      document.getElementById('deckTutorialPrompt').classList.add('hidden');
+      const button=document.getElementById('deckbtn');
+      button.classList.remove('tutorial-pulse'); button.textContent='DECK [TAB]';
+    }
     renderDeckView();
     el.classList.remove('hidden');
     state.paused=true;
@@ -1205,6 +1983,47 @@ function toggleDeck(){
   }
 }
 function renderDeckView(){
+  {
+    const deckRoot=document.getElementById('deckGrid');
+    deckRoot.innerHTML='';
+    TYPES.forEach(type=>{
+      const cards=state.deck.filter(id=>LIB[id].type===type);
+      if(!cards.length) return;
+      const section=document.createElement('section');
+      section.className='deck-section';
+      const title=document.createElement('div');
+      title.className='deck-section-title '+type;
+      title.textContent=type+' CARDS ('+cards.length+')';
+      const sectionGrid=document.createElement('div');
+      sectionGrid.className='deck-section-grid';
+      cards.forEach(id=>{
+        const card=leveledCard(id);
+        const el=document.createElement('div');
+        el.className='dcard '+card.type+(card.rainbow?' rainbow':'');
+        const icon=document.createElement('div'); icon.className='rc-icon'; icon.textContent=card.icon;
+        const name=document.createElement('div'); name.className='rc-name'; name.textContent=card.name;
+        const level=document.createElement('div'); level.className='rc-type'; level.textContent='LEVEL '+card.level;
+        const damage=document.createElement('div'); damage.className='rc-dmg'; damage.textContent=card.dmg+' DMG';
+        const trash=document.createElement('button'); trash.className='trash-card';
+        const lastOfType=cards.length<=1;
+        trash.disabled=lastOfType;
+        trash.textContent=lastOfType?'LAST '+type.toUpperCase():'TRASH CARD';
+        trash.title=lastOfType?'You must keep at least one '+type+' card.':'Remove this card from the deck.';
+        trash.addEventListener('click',event=>{
+          event.stopPropagation();
+          if(state.deck.filter(cardId=>LIB[cardId].type===type).length<=1) return;
+          state.deck=state.deck.filter(cardId=>cardId!==id);
+          delete state.cardLevels[id];
+          buildQueues(); syncHUD(); renderDeckView();
+        });
+        el.appendChild(icon); el.appendChild(name); el.appendChild(level); el.appendChild(damage); el.appendChild(trash);
+        sectionGrid.appendChild(el);
+      });
+      section.appendChild(title); section.appendChild(sectionGrid); deckRoot.appendChild(section);
+    });
+    return;
+  }
+  /* Previous flat renderer retained here for reference.
   const grid = document.getElementById('deckGrid');
   grid.innerHTML='';
   state.deck.forEach(id=>{
@@ -1214,6 +2033,7 @@ function renderDeckView(){
     el.innerHTML = `<div class="rc-icon">${card.icon}</div><div class="rc-name">${card.name}</div>`;
     grid.appendChild(el);
   });
+  */
 }
 document.getElementById('deckbtn').addEventListener('click', toggleDeck);
 document.getElementById('closeDeck').addEventListener('click', toggleDeck);
@@ -1231,9 +2051,9 @@ function syncHUD(){
     col.innerHTML='';
     const show = q.slice(0,3);
     show.forEach((id,idx)=>{
-      const card = LIB[id];
+      const card = leveledCard(id);
       const div = document.createElement('div');
-      div.className = 'card '+card.type+(idx===0?' primary':'')+(state.cooldown[t]>0 && idx===0?' cooling':'');
+      div.className = 'card '+card.type+(card.rainbow?' rainbow':'')+(idx===0?' primary':'')+(state.cooldown[t]>0 && idx===0?' cooling':'');
       div.innerHTML = `<div class="cd-icon">${card.icon}</div>${card.dmg>0?`<div class="cd-dmg">${card.dmg}</div>`:''}`;
       div.title = card.name+': '+card.desc;
       col.appendChild(div);
@@ -1251,12 +2071,14 @@ function render(){
 
   drawBackground();
   drawGround();
+  drawObjectiveMarker();
 
   const drawables = [...state.enemies.filter(e=>e.alive||e.spawnAnim>0), {isPlayer:true}];
   drawables.sort((a,b)=> (a.isPlayer?player.x:a.x) - (b.isPlayer?player.x:b.x));
   for(const d of drawables){
     if(d.isPlayer) drawPlayer(); else drawEnemy(d);
   }
+  drawContextHint();
 
   drawProjectiles();
   drawParticles();
@@ -1370,11 +2192,31 @@ function drawPlayer(){
   const flash = p.hitFlash>0;
   const invuln = p.invuln>0;
   const airborne = p.z>2;
+  const rainbowRank = state.combo.rank==='S' || state.combo.rank==='SS' || state.combo.rank==='SSS';
+  const rainbowHue = (state.time*.22)%360;
+  const rainbowColor = `hsl(${rainbowHue},100%,65%)`;
+  const rainbowColor2 = `hsl(${(rainbowHue+120)%360},100%,65%)`;
+  const rainbowColor3 = `hsl(${(rainbowHue+240)%360},100%,65%)`;
 
   ctx.save();
   ctx.translate(p.x, baseY);
   ctx.scale(p.facing,1);
   if(invuln) ctx.globalAlpha = 0.55 + 0.35*Math.sin(state.time*0.03);
+
+  if(rainbowRank){
+    ctx.save();
+    ctx.globalAlpha=.65;
+    ctx.shadowColor=rainbowColor;
+    ctx.shadowBlur=20;
+    ctx.lineWidth=4;
+    for(let i=0;i<3;i++){
+      ctx.strokeStyle=`hsl(${(rainbowHue+i*120)%360},100%,65%)`;
+      ctx.beginPath();
+      ctx.arc(0,-30,25+i*4,-1.15+i*.12,1.15+i*.12);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
   // ---- attack telegraph flare behind/around player ----
   drawPlayerAttackFlare();
@@ -1386,7 +2228,7 @@ function drawPlayer(){
   const legLift = airborne ? 10 : pose.legLift;
 
   // legs (rectangles) -- tucked when airborne, overridden per-card during leg attacks
-  ctx.fillStyle = flash?'#ffffff':'#2c2140';
+  ctx.fillStyle = flash?'#ffffff':rainbowRank?rainbowColor:'#2c2140';
   const legW=9, legH= airborne? 20 : 28;
   const frontAngle = pose.frontLeg || (walkSwing*Math.PI/180*0.4);
   const backAngle = pose.backLeg || (-walkSwing*Math.PI/180*0.4);
@@ -1404,6 +2246,7 @@ function drawPlayer(){
   ctx.rotate(lean);
   let torsoColor = '#e9e2ff';
   if(flash) torsoColor = '#ffffff';
+  else if(rainbowRank) torsoColor = rainbowColor2;
   else if(p.attackAnim>0){
     torsoColor = p.attackType==='light'?'#c9ecff':p.attackType==='heavy'?'#ffd6d6':p.attackType==='dodge'?'#d7ffe9':'#fff2cf';
   }
@@ -1420,7 +2263,7 @@ function drawPlayer(){
     ctx.stroke();
   }
   // chest emblem
-  ctx.fillStyle='#ff2e88';
+  ctx.fillStyle=rainbowRank?rainbowColor:'#ff2e88';
   ctx.fillRect(-5,-34,10,8);
   ctx.restore();
 
@@ -1428,9 +2271,9 @@ function drawPlayer(){
   const headY = hipY-58-16;
   ctx.beginPath();
   ctx.arc(0, headY, 15, 0, Math.PI*2);
-  ctx.fillStyle = flash?'#ffffff':'#ffd9c2';
+  ctx.fillStyle = flash?'#ffffff':rainbowRank?rainbowColor3:'#ffd9c2';
   ctx.fill();
-  ctx.fillStyle='#ff2e88';
+  ctx.fillStyle=rainbowRank?rainbowColor:'#ff2e88';
   ctx.fillRect(-2,headY-3,14,5);
 
   // arm / weapon shape -- unique per card
@@ -1483,6 +2326,16 @@ function drawWeaponArm(hipY, ap){
       }
       break;
     }
+    case 'flurry': {
+      for(let i=0;i<7;i++){
+        const lt=clamp(t*7-i,0,1);
+        ctx.save();
+        ctx.globalAlpha=.35+i*.08;
+        drawLimb(-.18+(i%2)*.36,Math.sin(lt*Math.PI)*30,6,`hsl(${(state.time*.22+i*45)%360},100%,65%)`,null);
+        ctx.restore();
+      }
+      break;
+    }
     case 'risingKnee':
       drawLimb(0.45, 4, 6, '#5ec8f8', null); // counter-swing arm, the knee does the work
       break;
@@ -1495,6 +2348,13 @@ function drawWeaponArm(hipY, ap){
       const angle = ap.phase==='windup' ? -0.9*t : -0.9+t*1.7;
       const reach = ap.phase==='windup' ? t*8 : 14+t*30;
       drawLimb(angle, reach, 9, '#ff5d5d', '#ff8a8a');
+      break;
+    }
+    case 'titanUppercut': {
+      const angle=ap.phase==='windup'?-.95*t:-.95+t*1.9;
+      const reach=ap.phase==='windup'?t*10:20+t*42;
+      ctx.shadowColor=`hsl(${(state.time*.22)%360},100%,65%)`; ctx.shadowBlur=18;
+      drawLimb(angle,reach,12,`hsl(${(state.time*.22+120)%360},100%,65%)`,'#ffffff');
       break;
     }
     case 'heavySlam': {
@@ -1522,6 +2382,10 @@ function drawWeaponArm(hipY, ap){
       break;
     case 'flashStep':
       ctx.save(); ctx.globalAlpha=0.7; drawLimb(-0.3, 14, 6, '#5dffb0', null); ctx.restore();
+      break;
+    case 'repulsionDash':
+      ctx.save(); ctx.globalAlpha=.85; ctx.shadowColor=`hsl(${(state.time*.22)%360},100%,65%)`; ctx.shadowBlur=20;
+      drawLimb(-.3,18,8,`hsl(${(state.time*.22+240)%360},100%,65%)`,'#ffffff'); ctx.restore();
       break;
     case 'parryStep':
       drawLimb(-1.45, 6, 12, '#5dffb0', null);
@@ -1566,6 +2430,14 @@ function drawWeaponArm(hipY, ap){
 
 function drawPlayerAttackFlare(){
   const p = player;
+  if(p.parryTimer>0){
+    const pulse=0.5+0.5*Math.sin(state.time*0.025);
+    ctx.save();
+    ctx.globalAlpha=0.55+0.25*pulse;
+    ctx.strokeStyle='#5dffb0'; ctx.lineWidth=4;
+    ctx.beginPath(); ctx.arc(0,-48,34+pulse*7,0,Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
   if(p.winding==='heavy'){
     const t = 1-(p.windupTimer/WINDUP.heavy);
     ctx.save();
@@ -1592,10 +2464,70 @@ function drawPlayerAttackFlare(){
 
 /* ---- enemies ---- */
 function enemyHeight(en){
+  if(en.diveHeight!=null) return en.diveHeight;
   const hover = en.flying ? en.hoverHeight + Math.sin(state.time*0.006 + en.hoverOffset)*12 : 0;
   const launched = en.airborne ? Math.max(0,-en.vy*0.06+40) : 0;
   const leap = en.bossLeap>0 ? Math.sin((1-en.bossLeap/en.strikeDur)*Math.PI)*125 : 0;
   return hover + launched + leap;
+}
+
+function drawContextHint(){
+  if(state.rankHintTimer<=0&&state.dodgeHintTimer<=0) return;
+  const bob=Math.sin(state.time*.012)*4;
+  const x=player.x, y=GROUND_Y-player.z-135+bob;
+  ctx.save();
+  ctx.font='900 15px Orbitron, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  const dodgeWarning=state.dodgeHintTimer>0;
+  const text=dodgeWarning?'DON\u2019T FORGET: DODGE WITH L!':'MASH J + K!';
+  const width=ctx.measureText(text).width+28;
+  const hintColor=dodgeWarning?'#5dffb0':'#ffd166';
+  ctx.fillStyle='rgba(10,7,16,.9)'; ctx.strokeStyle=hintColor; ctx.lineWidth=2;
+  roundRect(x-width/2,y-18,width,36,8); ctx.fill(); ctx.stroke();
+  ctx.fillStyle=hintColor; ctx.shadowColor=hintColor; ctx.shadowBlur=10; ctx.fillText(text,x,y);
+  ctx.beginPath(); ctx.moveTo(x-8,y+18); ctx.lineTo(x,y+28); ctx.lineTo(x+8,y+18); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+function drawObjectiveMarker(){
+  const o=state.objective;
+  if(o.type==='defend'){
+    const pulse=0.5+0.5*Math.sin(state.time*0.008);
+    ctx.save(); ctx.translate(o.orbX,GROUND_Y-44);
+    ctx.shadowColor='#4be8ff'; ctx.shadowBlur=18+pulse*16;
+    ctx.fillStyle=o.orbHp>30?'#4be8ff':'#ff2e88';
+    ctx.beginPath(); ctx.arc(0,0,22+pulse*3,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#eae6f5'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.arc(0,0,31,0,Math.PI*2); ctx.stroke();
+    ctx.shadowColor='#4be8ff'; ctx.shadowBlur=10;
+    ctx.fillStyle='#ffffff'; ctx.font='bold 22px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillText(Math.max(0,Math.ceil(o.timer/1000))+'s',0,-48);
+    ctx.font='bold 10px system-ui'; ctx.fillStyle='#4be8ff';
+    ctx.fillText('DEFEND',0,-74);
+    ctx.restore();
+  } else if(o.type==='goal'){
+    const pulse=0.5+0.5*Math.sin(state.time*0.01);
+    ctx.save(); ctx.translate(o.goalX,GROUND_Y);
+    ctx.strokeStyle='#5dffb0'; ctx.lineWidth=5; ctx.shadowColor='#5dffb0'; ctx.shadowBlur=22;
+    ctx.beginPath(); ctx.ellipse(0,-65,30+pulse*5,65,0,0,Math.PI*2); ctx.stroke();
+    ctx.globalAlpha=.18+.12*pulse; ctx.fillStyle='#5dffb0'; ctx.fill(); ctx.restore();
+
+    const left=state.camX+60, right=state.camX+W-60;
+    const visible=o.goalX>=left&&o.goalX<=right;
+    const arrowX=clamp(o.goalX,left,right);
+    const arrowY=visible?GROUND_Y-175:135;
+    const direction=o.goalX<left?-1:o.goalX>right?1:0;
+    ctx.save(); ctx.translate(arrowX,arrowY);
+    ctx.shadowColor='#5dffb0'; ctx.shadowBlur=18; ctx.fillStyle='#5dffb0';
+    ctx.translate(0,Math.sin(state.time*.012)*7);
+    ctx.beginPath();
+    if(direction<0){ ctx.moveTo(-24,0); ctx.lineTo(10,-17); ctx.lineTo(10,17); }
+    else if(direction>0){ ctx.moveTo(24,0); ctx.lineTo(-10,-17); ctx.lineTo(-10,17); }
+    else { ctx.moveTo(0,24); ctx.lineTo(-17,-10); ctx.lineTo(17,-10); }
+    ctx.closePath(); ctx.fill();
+    ctx.font='bold 12px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillText(Math.round(Math.abs(player.x-o.goalX))+'m',0,-25);
+    ctx.restore();
+  }
 }
 
 function drawEnemy(en){
@@ -1608,15 +2540,54 @@ function drawEnemy(en){
 
   ctx.save();
   ctx.translate(en.x, GROUND_Y - z);
+  ctx.rotate(en.airborne?(en.rotation||0):0);
   ctx.scale(en.facing*scale, scale);
 
   const flash = en.hitFlash>0;
   const frozen = en.frozen>0;
   ctx.fillStyle = flash? '#ffffff' : frozen ? '#70dcff' : en.color;
 
-  if(en.kind==='brute'){
+  if(en.kind==='rainbowNemesis'){
+    const hue=(state.time*.18)%360;
+    const c1=`hsl(${hue},100%,65%)`,c2=`hsl(${(hue+120)%360},100%,65%)`,c3=`hsl(${(hue+240)%360},100%,65%)`;
+    ctx.shadowColor=c1; ctx.shadowBlur=22;
+    ctx.fillStyle=flash?'#ffffff':c1;
+    ctx.fillRect(-13,-29,10,29); ctx.fillRect(5,-29,10,29);
+    ctx.fillStyle=flash?'#ffffff':c2;
+    ctx.beginPath(); ctx.moveTo(0,-88); ctx.lineTo(22,-27); ctx.lineTo(-22,-27); ctx.closePath(); ctx.fill();
+    ctx.fillStyle=flash?'#ffffff':c3;
+    ctx.beginPath(); ctx.arc(0,-104,16,0,Math.PI*2); ctx.fill();
+    ctx.save(); ctx.translate(9,-72);
+    const action=en.nemesisAction;
+    const armAngle=action==='titanUppercut'?-1.15:action==='spectrumBeam'?0:action==='prismaticFault'?.65:action==='repulsionDash'?-.35:.12;
+    ctx.rotate(armAngle); ctx.fillStyle=c1; ctx.fillRect(0,-4,action==='spectrumBeam'?50:34,8); ctx.restore();
+    ctx.globalAlpha=.7; ctx.strokeStyle=c3; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.arc(0,-54,34+Math.sin(state.time*.015)*5,0,Math.PI*2); ctx.stroke(); ctx.globalAlpha=1;
+  } else if(en.kind==='brute'){
     roundRect(-24,-70,48,64,10); ctx.fill();
     ctx.beginPath(); ctx.arc(0,-84,17,0,Math.PI*2); ctx.fill();
+  } else if(en.kind==='hopper'){
+    roundRect(-19,-58,38,48,12); ctx.fill();
+    ctx.beginPath(); ctx.arc(0,-70,15,0,Math.PI*2); ctx.fill();
+    ctx.lineWidth=7; ctx.strokeStyle=flash?'#ffffff':'#a8f08c';
+    ctx.beginPath(); ctx.moveTo(-12,-12); ctx.lineTo(-28,4); ctx.moveTo(12,-12); ctx.lineTo(28,4); ctx.stroke();
+  } else if(en.kind==='bossWalker'){
+    roundRect(-40,-108,80,98,15); ctx.fill();
+    ctx.beginPath(); ctx.arc(0,-130,28,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=flash?'#ffffff':'#8f1f2a';
+    roundRect(-52,-84,18,68,8); ctx.fill(); roundRect(34,-84,18,68,8); ctx.fill();
+  } else if(en.kind==='bossGunner'){
+    roundRect(-38,-96,76,86,14); ctx.fill();
+    ctx.beginPath(); ctx.arc(0,-116,25,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=flash?'#ffffff':'#a8f4ff';
+    ctx.fillRect(20,-78,76,18); ctx.fillRect(78,-84,22,30);
+  } else if(en.kind==='bossUfo'){
+    ctx.fillStyle=flash?'#ffffff':'#d9b3ff';
+    ctx.beginPath(); ctx.ellipse(0,-44,64,24,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=flash?'#ffffff':'#7d3bb5';
+    ctx.beginPath(); ctx.arc(0,-56,30,Math.PI,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#ffd166';
+    for(let lx=-38;lx<=38;lx+=19){ ctx.beginPath(); ctx.arc(lx,-37,4,0,Math.PI*2); ctx.fill(); }
   } else if(en.kind==='boss'){
     roundRect(-42,-118,84,108,16); ctx.fill();
     ctx.beginPath(); ctx.arc(0,-143,29,0,Math.PI*2); ctx.fill();
@@ -1625,6 +2596,20 @@ function drawEnemy(en){
     roundRect(38,-90,16,58,8); ctx.fill();
     ctx.beginPath(); ctx.moveTo(-24,-164); ctx.lineTo(-43,-184); ctx.lineTo(-10,-167); ctx.closePath(); ctx.fill();
     ctx.beginPath(); ctx.moveTo(24,-164); ctx.lineTo(43,-184); ctx.lineTo(10,-167); ctx.closePath(); ctx.fill();
+  } else if(en.kind==='swordbound'){
+    roundRect(-28,-86,56,76,10); ctx.fill();
+    ctx.beginPath(); ctx.arc(0,-101,20,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=flash?'#ffffff':'#ffd166'; ctx.save(); ctx.translate(18,-70);
+    const swing=en.attackState==='strike'?-1.4+(1-en.stateTimer/en.strikeDur)*2.5:-1.05;
+    ctx.rotate(swing); ctx.fillRect(0,-4,72,8); ctx.fillRect(-5,-11,10,22); ctx.restore();
+  } else if(en.kind==='sentinel'){
+    roundRect(-25,-72,50,64,8); ctx.fill();
+    ctx.beginPath(); ctx.arc(0,-86,17,0,Math.PI*2); ctx.fill();
+    if(!en.armorBroken){
+      ctx.strokeStyle='#d4def2'; ctx.lineWidth=5;
+      roundRect(-30,-78,60,72,10); ctx.stroke();
+      ctx.fillStyle='#9fb4d8'; ctx.fillRect(-34,-64,10,42);
+    }
   } else if(en.kind==='spitter'){
     roundRect(-16,-56,32,46,8); ctx.fill();
     ctx.beginPath(); ctx.arc(0,-68,13,0,Math.PI*2); ctx.fill();
@@ -1640,7 +2625,8 @@ function drawEnemy(en){
     ctx.beginPath(); ctx.arc(0,-72,14,0,Math.PI*2); ctx.fill();
   }
   ctx.fillStyle='#0a0710';
-  ctx.fillRect(-8,en.kind==='boss'?-147:en.kind==='brute'?-88:en.kind==='flyer'?-73:-72,16,4);
+  const eyeY=en.kind==='boss'?-147:en.kind==='bossWalker'?-134:en.kind==='bossGunner'?-120:en.kind==='bossUfo'?-58:en.kind==='swordbound'?-105:en.kind==='brute'?-88:en.kind==='flyer'?-73:-72;
+  ctx.fillRect(-8,eyeY,16,4);
 
   if(frozen){
     ctx.strokeStyle='#d7f7ff'; ctx.lineWidth=3;
@@ -1656,17 +2642,22 @@ function drawEnemy(en){
   ctx.restore();
 
   if(en.hp<en.maxHp && en.alive){
-    const w=en.boss?84:44;
+    const w=en.boss?84:en.miniboss?68:44;
     ctx.fillStyle='rgba(0,0,0,0.5)';
     ctx.fillRect(en.x-w/2, GROUND_Y-en.radius*2-24-z, w, 6);
     ctx.fillStyle = en.hp/en.maxHp>0.3?'#5dffb0':'#ff2e88';
     ctx.fillRect(en.x-w/2, GROUND_Y-en.radius*2-24-z, w*clamp(en.hp/en.maxHp,0,1), 6);
+    if(en.rainbowNemesis){
+      ctx.font='900 11px Orbitron, system-ui'; ctx.textAlign='center'; ctx.fillStyle='#ffffff';
+      ctx.fillText('THE PRISMATIC ECHO',en.x,GROUND_Y-en.radius*2-31-z);
+    }
   }
 }
 
 // the requested "swinging rectangle" telegraph: a bar that winds up above the
 // enemy and swings down through the strike, plus a ranged charge-up ring.
 function drawEnemyTelegraph(en){
+  const usesGenericSwing=en.kind==='grunt'||en.kind==='brute'||en.kind==='sentinel';
   if(en.attackState==='windup'){
     const t = 1-(en.stateTimer/en.telegraphDur); // 0 -> 1 as the swing approaches
     const z = enemyHeight(en);
@@ -1699,6 +2690,7 @@ function drawEnemyTelegraph(en){
     const dir = en.facing;
     ctx.fillRect(en.x + (dir>0?0:-en.meleeRange), GROUND_Y-6, en.meleeRange, 8);
     ctx.restore();
+    if(!usesGenericSwing) return;
 
     // the swinging rectangle "club" -- rotates from raised to striking
     ctx.save();
@@ -1714,6 +2706,7 @@ function drawEnemyTelegraph(en){
       spawnPopup(en.x, GROUND_Y-en.radius*2-30-z, '!', en.boss?'#b4497d':'#ff2e88', true);
     }
   } else if(en.attackState==='strike'){
+    if(!usesGenericSwing) return;
     const z = enemyHeight(en);
     ctx.save();
     ctx.translate(en.x, GROUND_Y-en.radius*2+6-z);
@@ -1798,6 +2791,14 @@ function drawFx(){
       ctx.strokeStyle=f.color; ctx.lineWidth=3;
       ctx.beginPath(); ctx.moveTo(-10,-20); ctx.lineTo(-40,-14); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(-40,6); ctx.stroke();
+    } else if(f.kind==='beam'){
+      ctx.translate(f.x,f.y); ctx.scale(f.facing,1);
+      const beamGradient=ctx.createLinearGradient(0,0,f.length,0);
+      beamGradient.addColorStop(0,'#ff4d6d'); beamGradient.addColorStop(.2,'#ffd166');
+      beamGradient.addColorStop(.4,'#5dffb0'); beamGradient.addColorStop(.65,'#4be8ff'); beamGradient.addColorStop(1,'#b66cff');
+      ctx.fillStyle=beamGradient; ctx.shadowColor='#ffffff'; ctx.shadowBlur=24;
+      ctx.fillRect(0,-12,f.length,24);
+      ctx.fillStyle='rgba(255,255,255,.8)'; ctx.fillRect(0,-4,f.length,8);
     } else if(f.kind==='spin'){
       ctx.translate(f.x,f.y);
       ctx.rotate((1-t)*9);
@@ -1852,6 +2853,8 @@ function drawFx(){
 /* ============================== GAME OVER / START ============================== */
 function gameOver(){
   state.running=false;
+  document.querySelector('#overOverlay .titlemain').textContent='YOU ARE BROKEN';
+  document.getElementById('restartBtn').textContent='REBUILD THE DECK';
   document.getElementById('deathHint').textContent = 'TIP: ' + DEATH_HINTS[deathHintIndex];
   deathHintIndex = (deathHintIndex+1) % DEATH_HINTS.length;
   const statline = document.getElementById('statLine');
@@ -1863,17 +2866,54 @@ function gameOver(){
   document.getElementById('overOverlay').classList.remove('hidden');
 }
 
+function finalVictory(){
+  waveTransitioning=true;
+  state.running=false;
+  document.querySelector('#overOverlay .titlemain').textContent='CHAINBREAKER ASCENDANT';
+  document.getElementById('deathHint').textContent='THE PRISMATIC ECHO HAS BEEN SHATTERED. WAVE 50 COMPLETE - THE RUN IS WON.';
+  document.getElementById('restartBtn').textContent='BEGIN A NEW RUN';
+  document.getElementById('statLine').innerHTML=`
+    <div>FINAL WAVE<br><b>50</b></div>
+    <div>ENEMIES DEFEATED<br><b>${state.killsThisRun}</b></div>
+    <div>FINAL SCORE<br><b>${state.score}</b></div>
+  `;
+  document.getElementById('overOverlay').classList.remove('hidden');
+}
+
 function resetRun(){
+  document.querySelector('#overOverlay .titlemain').textContent='YOU ARE BROKEN';
+  document.getElementById('restartBtn').textContent='REBUILD THE DECK';
+  STARTER_DECK=makeRandomStarterDeck();
   state.deck = STARTER_DECK.slice();
+  state.cardLevels=Object.fromEntries(STARTER_DECK.map(id=>[id,1]));
   state.wave = 1; state.score=0; state.killsThisRun=0;
-  state.combo = {count:0,timer:0,lastTag:null,window:1600};
+  state.combo = {count:0,timer:0,lastTag:null,window:1600,history:[],rank:null};
+  state.reversalReady=0;
   state.buffHits=0;
   state.dodgeBuff=1; state.dodgeBuffTimer=0;
   state.pending=[];
+  state.delayedBlasts=[];
+  state.hitStop=0; state.slowMoTimer=0;
+  state.lastBoss=null;
+  state.waveEndRank=null;
+  state.finalBossUnlocked=false; state.finalBossPending=false; state.finalBossActive=false; state.finalBossDefeated=false;
+  state.tutorialIndex=0; state.tutorialTimer=0;
+  state.tutorialOverride=''; state.tutorialOverrideTimer=0;
+  state.deckTutorialPause=false;
+  state.countdownPause=false;
+  const deckButton=document.getElementById('deckbtn');
+  deckButton.classList.remove('tutorial-pulse'); deckButton.textContent='DECK [TAB]';
+  const deckPrompt=document.getElementById('deckTutorialPrompt');
+  if(deckPrompt) deckPrompt.classList.add('hidden');
+  const countdownPrompt=document.getElementById('countdownPrompt');
+  if(countdownPrompt) countdownPrompt.classList.add('hidden');
+  state.dRankTime=0; state.rankHintTimer=0; state.rankHintCooldown=0;
+  state.recentDamage=0; state.damageWindowTimer=0; state.dodgeHintTimer=0; state.dodgeHintCooldown=0;
   state.enemies=[]; state.projectiles=[]; state.particles=[];
   fx.length=0;
   player.hp=player.maxHp; player.x=300; player.z=0; player.vz=0; player.invuln=1000; player.dodgeInvuln=0; player.knockbackVel=0;
   player.winding=null; player.windupTimer=0;
+  player.parryTimer=0;
   buildQueues();
   updateComboUI();
   syncHUD();
@@ -1894,6 +2934,45 @@ document.getElementById('restartBtn').addEventListener('click', ()=>{
   waveTransitioning=false;
   startWave(1);
 });
+
+const objectivePill=document.createElement('div');
+objectivePill.id='objectivepill'; objectivePill.textContent='DEFEAT ALL ENEMIES';
+document.getElementById('topbar').insertBefore(objectivePill,document.getElementById('scorepill'));
+const announcer=document.createElement('div'); announcer.id='announcer';
+document.getElementById('app').appendChild(announcer);
+const tutorialHint=document.createElement('div'); tutorialHint.id='tutorialHint';
+tutorialHint.innerHTML='<b>COMBAT TIP</b><span></span>';
+document.querySelector('.hud').appendChild(tutorialHint);
+const rewardHint=document.createElement('div'); rewardHint.id='rewardHint';
+rewardHint.style.cssText='max-width:680px;text-align:center;color:#ffd166;font-size:14px;line-height:1.5';
+document.getElementById('rewardOverlay').insertBefore(rewardHint,document.getElementById('rewardRow'));
+const deckTutorialPrompt=document.createElement('div');
+deckTutorialPrompt.id='deckTutorialPrompt'; deckTutorialPrompt.className='hidden';
+deckTutorialPrompt.style.cssText='position:absolute;top:145px;left:50%;transform:translateX(-50%);z-index:60;padding:15px 22px;background:rgba(10,7,16,.96);border:2px solid #4be8ff;color:#fff;font:800 15px Orbitron;text-align:center;letter-spacing:1px;box-shadow:0 0 28px rgba(75,232,255,.55);pointer-events:none';
+const deckPromptTitle=document.createElement('div');
+deckPromptTitle.textContent='PRESS TAB TO OPEN DECK MANAGEMENT';
+const deckPromptSub=document.createElement('div');
+deckPromptSub.style.cssText='margin-top:7px;font:600 12px Chakra Petch;color:#aaa;letter-spacing:0';
+deckPromptSub.textContent='Trash unwanted cards and refine your attack rotation.';
+deckTutorialPrompt.appendChild(deckPromptTitle); deckTutorialPrompt.appendChild(deckPromptSub);
+document.getElementById('app').appendChild(deckTutorialPrompt);
+const countdownPrompt=document.createElement('div');
+countdownPrompt.id='countdownPrompt'; countdownPrompt.className='hidden';
+countdownPrompt.style.cssText='position:absolute;inset:0;z-index:70;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(5,3,10,.86);text-align:center';
+const countdownTitle=document.createElement('div'); countdownTitle.id='countdownTitle';
+countdownTitle.style.cssText='font:900 clamp(34px,7vw,72px) Orbitron;color:#ffd166;letter-spacing:6px;text-shadow:0 0 30px #ff2e88';
+const countdownSubtitle=document.createElement('div'); countdownSubtitle.id='countdownSubtitle';
+countdownSubtitle.style.cssText='max-width:680px;font:700 14px Chakra Petch;color:#eae6f5;letter-spacing:2px';
+const countdownContinue=document.createElement('button'); countdownContinue.className='bigbtn'; countdownContinue.textContent='CONTINUE';
+countdownContinue.addEventListener('click',closeFinalCountdown);
+countdownPrompt.appendChild(countdownTitle); countdownPrompt.appendChild(countdownSubtitle); countdownPrompt.appendChild(countdownContinue);
+document.getElementById('app').appendChild(countdownPrompt);
+
+const comboGuide=document.createElement('div');
+comboGuide.className='titlesub';
+comboGuide.style.cssText='font-size:11px;line-height:1.8;max-width:820px';
+comboGuide.innerHTML='COMBO RECIPES — SKYBREAKER: Uppercut → Juggle Kick → Heavy Slam<br>REVERSAL: Perfect Dodge → Heavy &nbsp;•&nbsp; SHATTER: Freeze → Heavy';
+document.getElementById('startOverlay').appendChild(comboGuide);
 
 buildQueues();
 syncHUD();
